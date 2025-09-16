@@ -35,7 +35,8 @@ from PyQt5.QtWidgets import (
 
 class HumanWindow(QMainWindow):
     """
-    Main GUI window for displaying fish image, tail trace, and other controls.
+    Main GUI window for humans to see.
+    Displays fish image, tail trace, and other controls.
     """
     
     def __init__(self):
@@ -57,16 +58,31 @@ class HumanWindow(QMainWindow):
         
         # Create other widgets 
         self.stimulus_window = StimulusWindow()
-        self.camera_display = pg.ImageView() # this is an overkill.
-        self.tail_plot = pg.PlotWidget()
+        self.camera_display = pg.GraphicsLayoutWidget() # sort of a container
+        self.angle_display = pg.GraphicsLayoutWidget() # a container
         self.control_panel = ControlPanel()
-        
-        
+
+        # Prepare camera view + tail axis
+        # register viewbox > image to the camera display
+        self.display_area = pg.ViewBox(invertY=True, lockAspect=True) # this graphics item implements easy scaling
+        self.camera_display.addItem(self.display_area) # add ViewBox to GraphicLayoutWidget
+        self.image_item = pg.ImageItem()
+        self.display_area.addItem(self.image_item) # add ImageItem to ViewBox
+        self.tail_standard = pg.LineSegmentROI([(10,10),(100,100)])
+        self.tail_standard.setPen(dict(color=(5, 40, 200), width=3))
+        self.display_area.addItem(self.tail_standard)
+
+        # Prepare tail angle plot
+        self.angle_plot = pg.PlotItem()
+        self.angle_display.addItem(self.angle_plot)
+        self.angle_line = pg.PlotDataItem()
+        self.angle_plot.addItem(self.angle_line)
+
         # Create vertical box layout. From top, we will show camera image, tail plot, and controls
         # Control box will require layouts of its own, but let's worry about that later
         layout = QVBoxLayout()
         layout.addWidget(self.camera_display)
-        layout.addWidget(self.tail_plot)
+        layout.addWidget(self.angle_display)
         layout.addWidget(self.control_panel)
         container.setLayout(layout)
         
@@ -80,7 +96,7 @@ class HumanWindow(QMainWindow):
         
         # Define timer for GUI
         self.timer = QTimer()
-        self.timer.setInterval(100) # millisecond
+        self.timer.setInterval(50) # millisecond
         self.timer.timeout.connect(self.fetch_and_show_image) # define callback
         self.timer.start()
         
@@ -96,13 +112,15 @@ class HumanWindow(QMainWindow):
         if not fetched_image.IsIncomplete():
             converted_image = np.array(fetched_image.GetData(), dtype='uint8').reshape((fetched_image.GetHeight(), fetched_image.GetWidth()))
             fetched_image.Release()
-        self.camera_display.setImage(converted_image)
+        self.image_item.setImage(converted_image)
+        self.angle_line.setData(np.arange(converted_image.shape[1]), np.mean(converted_image, axis=0))
         
         
         
 class StimulusWindow(QWidget):
     def __init__(self):
         super().__init__()
+
         
 class ControlPanel(QWidget):
     def __init__(self):
