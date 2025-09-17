@@ -100,8 +100,8 @@ class HumanWindow(QMainWindow):
         
         
 class StimulusWindow(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
 
 class CameraPanel(pg.GraphicsLayoutWidget):
@@ -109,8 +109,8 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     This is the panel (widget) for the camera view
     It holds image from camera + tail standard + tracked tail
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # This is the "GraphicsItem" that is added to the widget
         self.display_area = pg.ViewBox(invertY=True, lockAspect=True)  # this graphics item implements easy scaling
         self.fish_image_item = pg.ImageItem()
@@ -131,8 +131,8 @@ class AnglePanel(pg.GraphicsLayoutWidget):
     """
     This is the panel (widget) for the tail angle plot
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         # Prepare tail angle plot item & data
         self.angle_plot = pg.PlotItem()
         self.angle_plot_data = pg.PlotDataItem()
@@ -156,6 +156,7 @@ class ControlPanel(QWidget):
             layout.addWidget(QLabel('dummy'))
         self.setLayout(layout)
 
+# TODO Implement the Camera class as manufacturer agnostic abstract class, and
 class Camera():
     def __init__(self):
         self.system = PySpin.System.GetInstance()
@@ -182,28 +183,20 @@ class Camera():
 
 
 
-def main():
-    """ 
-    This is what is called upon when you execute the file. 
-    """
-    
-    # Prepare the PyQt Application
-    app = QApplication([])
-    
-    # Instantiate the main GUI window
-    win = HumanWindow()
-        
-    # show the window
-    win.show()
+"""
+In the end, I need to be able to run the application by executing each script file.
+For this to happen, the QApplication needs to be executed within some kind of class constructor?
+"""
 
-    # Execute the app -- Kickstart the event loop!
-    # app.exec_() will return 0 when successfully completed, and some other
-    # error codes when not. This will handed to sys.exit(), which shuts down
-    # the python interpreter (and shows the error code, if any).
-    sys.exit(app.exec_())
+class MiniZFVR():
+    def __init__(self):
+        # Prepare the PyQt Application
+        app = QApplication([])
+        # Instantiate the main GUI window
+        win = HumanWindow()
+        # show the window
+        win.show()
+        # start the application
+        app.exec_()
 
 
-# This file is meant to be run as a script rather than being imported as a module.
-# When run as a script, the following lines will be executed, and main() will be called.
-if __name__ == '__main__':
-    main()
