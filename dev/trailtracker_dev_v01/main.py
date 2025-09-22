@@ -72,11 +72,18 @@ class MiniZFTT(QMainWindow):
         self.parameters = dict()
         self.load_config()
 
-        # Define timer for GUI
-        self.timer = QTimer()
-        self.timer.setInterval(50)  # millisecond
-        self.timer.timeout.connect(self.update_gui)  # define callback
-        self.timer.start()
+        # Define timers
+        self.fetch_timer = QTimer()
+        self.fetch_timer.setInterval(3)  # millisecond
+        self.fetch_timer.timeout.connect(self.fetch_and_track_tail)  # define callback
+
+        self.gui_timer = QTimer()
+        self.gui_timer.setInterval(100)  # millisecond
+        self.gui_timer.timeout.connect(self.update_gui)  # define callback
+
+
+        self.fetch_timer.start()
+        self.gui_timer.start()
 
 
     def arrange_widgets(self):
@@ -113,7 +120,12 @@ class MiniZFTT(QMainWindow):
         log the tail angle, pass it to the pipe
         This method should be called above camera frequency
         """
-        self.current_frame, timestamp = self.camera.fetch_image()
+        fetched_image, timestamp = self.camera.fetch_image()
+        if fetched_image is None: # image not ready
+            return
+
+        # If image was actually acquired, do all the following processing
+        self.current_frame = fetched_image
         current_angle = self.track_tail()
 
         self.angle_buffer[self.buffer_counter] = current_angle
@@ -137,9 +149,9 @@ class MiniZFTT(QMainWindow):
         Show whatever the latest frame and tail trace
         This method should be called at like 20 Hz tops
         """
-        self.fetch_and_track_tail()
+
         self.camera_panel.set_image(self.processed_frame)
-        self.angle_panel.set_data(np.arange(len(self.angle_buffer)), self.angle_buffer)
+        self.angle_panel.set_data(np.roll(np.arange(1000,0,-1), self.buffer_counter), self.angle_buffer) # somehow make this smarter
 
     def load_config(self):
         self.parameters['image_scale'] = 0.25
@@ -152,7 +164,8 @@ class MiniZFTT(QMainWindow):
         This will be called when the main window is closed.
         Release resources for graceful exit.
         """
-        self.timer.stop()
+        self.fetch_timer.stop()
+        self.gui_timer.stop()
         self.camera.close()
 
 

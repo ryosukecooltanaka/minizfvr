@@ -78,6 +78,7 @@ class AnglePanel(pg.GraphicsLayoutWidget):
         # Prepare tail angle plot item & data
         self.angle_plot = pg.PlotItem()
         self.angle_plot_data = pg.PlotDataItem()
+        self.angle_plot_data.setPen(dict(color=(225, 30, 200), width=1))
         # connect everything
         self.addItem(self.angle_plot)
         self.angle_plot.addItem(self.angle_plot_data)
