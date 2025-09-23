@@ -20,13 +20,15 @@ from utils import center_of_mass_based_tracking, preprocess_image
 from parameters import TailTrackerParams
 import os
 import json
+from time import time_ns as time
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
     QMainWindow,
-    QVBoxLayout
+    QVBoxLayout,
+    QLabel
 )
 
 
@@ -55,32 +57,33 @@ class MiniZFTT(QMainWindow):
         self.camera_panel = CameraPanel()
         self.angle_panel = AnglePanel()
         self.control_panel = ControlPanel()
+        self.message_strip = QLabel()
         self.arrange_widgets()
 
         # initialize camera
         self.camera = SelectCameraByName(self.parameters.camera_type,
                                          video_path=self.parameters.dummy_video_path)
 
-        # Prepare attributes to store loaded images & the results of the tail tracking
+        # Prepare attributes to store loaded images & the results of the tail tracking etc.
         self.current_frame = None
         self.processed_frame = None
         self.angle_buffer = np.full(1000, np.nan) # size should be specified by config etc.
         self.timestamp_buffer = np.full(1000, np.nan)
         self.buffer_counter = 0
         self.current_segment_position = [] # only for the visualization purpose
+        self.dt = 0
 
         # Setup callback functions for the control panel GUI
         self.connect_control_callbacks()
 
         # Define timers
         self.fetch_timer = QTimer()
-        self.fetch_timer.setInterval(3)  # millisecond
+        self.fetch_timer.setInterval(1)  # millisecond
         self.fetch_timer.timeout.connect(self.fetch_and_track_tail)  # define callback
 
         self.gui_timer = QTimer()
         self.gui_timer.setInterval(100)  # millisecond
         self.gui_timer.timeout.connect(self.update_data_panels)  # define callback
-
 
         self.fetch_timer.start()
         self.gui_timer.start()
@@ -108,11 +111,13 @@ class MiniZFTT(QMainWindow):
         layout.addWidget(self.camera_panel)
         layout.addWidget(self.angle_panel)
         layout.addWidget(self.control_panel)
+        layout.addWidget(self.message_strip)
 
         # Adjust height ratios
-        layout.setStretch(0, 10)
-        layout.setStretch(1, 3)
-        layout.setStretch(2, 1)
+        layout.setStretch(0, 30)
+        layout.setStretch(1, 9)
+        layout.setStretch(2, 3)
+        layout.setStretch(3, 1)
 
         container.setLayout(layout)
 
@@ -132,6 +137,7 @@ class MiniZFTT(QMainWindow):
         log the tail angle, pass it to the pipe
         This method should be called above camera frequency
         """
+
         fetched_image, timestamp = self.camera.fetch_image()
         if fetched_image is None: # image not ready
             return
@@ -143,6 +149,7 @@ class MiniZFTT(QMainWindow):
         self.angle_buffer[self.buffer_counter] = current_angle
         self.timestamp_buffer[self.buffer_counter] = timestamp
         self.buffer_counter = (self.buffer_counter+1)%1000
+
 
     def track_tail(self):
         """
@@ -177,6 +184,10 @@ class MiniZFTT(QMainWindow):
 
         # angle panel update
         self.angle_panel.set_data(np.roll(np.arange(1000,0,-1), self.buffer_counter), self.angle_buffer) # somehow make this smarter
+
+        # message strip update
+        last_dt = self.timestamp_buffer[(self.buffer_counter-1)%1000] - self.timestamp_buffer[(self.buffer_counter-2)%1000]
+        self.message_strip.setText('Frame capture frequency: {:0.2f} Hz'.format(1 / last_dt))
 
     def update_parameters(self):
         """
