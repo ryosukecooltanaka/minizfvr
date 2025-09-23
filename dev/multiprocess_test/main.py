@@ -1,5 +1,5 @@
 import multiprocessing as mp
-from time import time
+import time
 from PyQt5.QtCore import QSize, Qt, QTimer
 from PyQt5.QtWidgets import (
     QGraphicsScene,
@@ -42,18 +42,20 @@ class MPTestWindow(QMainWindow):
 
 
     def hello_every_second(self):
-        msg = self.q1.get(0.001)
-        print('Hello {:0.2e}'.format(msg))
+
+        messages = []
+        while not self.q1.empty():
+            try:
+                messages.append(self.q1.get(block=False))
+            except Empty:
+                continue
+        print('Hello', messages)
 
     def kill_blocking_process(self):
         print('kill the while process!')
         self.thing.kill_event.set()
-        while not self.q1.empty():
-            try:
-                self.q1.get(block=False)
-            except Empty:
-                continue
-            self.timer.stop()
+        self.blocking_process.terminate()
+
 
 
 class TestClass():
@@ -61,10 +63,11 @@ class TestClass():
         self.kill_event = mp.Event()
 
     def hoge(self, q1):
+        i = 0
         while not self.kill_event.is_set():
-            a = np.random.rand()
-            if a < 0.0001:
-                q1.put(a)
+            time.sleep(0.2)
+            q1.put(i)
+            i+=1
         print('exited the while loop')
 
 if __name__ == "__main__":

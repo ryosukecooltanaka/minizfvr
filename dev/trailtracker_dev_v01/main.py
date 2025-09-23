@@ -10,17 +10,16 @@ about managing multiple processes which feels complicated, and also this design 
 terms of what kind of programs to be used for the stimulus generation. Here I will first focus on completing the tail
 tracking app.
 
+2025/09/23
+I figured that probably separating frame acquisition into separate processes is still a good idea
+given time constraints and time stamping accuracy.
+
 """
 
 import numpy as np
 import sys
-from camera import SelectCameraByName
-from panels import CameraPanel, AnglePanel, ControlPanel
-from utils import center_of_mass_based_tracking, preprocess_image
-from parameters import TailTrackerParams
-import os
-import json
-from time import time_ns as time
+import multiprocessing as mp
+from queue import Empty
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
@@ -30,6 +29,11 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QLabel
 )
+
+from camera import SelectCameraByName
+from panels import CameraPanel, AnglePanel, ControlPanel
+from utils import center_of_mass_based_tracking, preprocess_image
+from parameters import TailTrackerParams
 
 
 class MiniZFTT(QMainWindow):
@@ -65,27 +69,32 @@ class MiniZFTT(QMainWindow):
                                          video_path=self.parameters.dummy_video_path)
 
         # Prepare attributes to store loaded images & the results of the tail tracking etc.
-        self.current_frame = None
+        self.current_frame = None # the latest raw frame
         self.processed_frame = None
         self.angle_buffer = np.full(1000, np.nan) # size should be specified by config etc.
         self.timestamp_buffer = np.full(1000, np.nan)
         self.buffer_counter = 0
-        self.current_segment_position = [] # only for the visualization purpose
-        self.dt = 0
+        self.current_segment_position = [] # store segment position only for the visualization purpose
 
         # Setup callback functions for the control panel GUI
         self.connect_control_callbacks()
 
-        # Define timers
-        self.fetch_timer = QTimer()
-        self.fetch_timer.setInterval(1)  # millisecond
-        self.fetch_timer.timeout.connect(self.fetch_and_track_tail)  # define callback
+        # multiprocessing stuff
+        self.frame_queue = mp.Queue() # this will store tuples of (frame, timestamp)
+        self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.frame_queue,))
 
+        # Do tracking (read frames from the queue, perform tracking)
+        self.tracking_timer = QTimer()
+        self.tracking_timer.setInterval(10) # should be faster than stimuli
+        self.tracking_timer.timeout.connect(self.track_tail)
+
+        # update GUI (i.e., camera panel) at 10 Hz
         self.gui_timer = QTimer()
         self.gui_timer.setInterval(100)  # millisecond
         self.gui_timer.timeout.connect(self.update_data_panels)  # define callback
 
-        self.fetch_timer.start()
+        self.acquisition_process.start()
+        self.tracking_timer.start()
         self.gui_timer.start()
 
     def arrange_widgets(self):
@@ -131,25 +140,6 @@ class MiniZFTT(QMainWindow):
     """
     Methods called continuously during the run
     """
-    def fetch_and_track_tail(self):
-        """
-        Read frame from the camera, perform the tracking algorithm on the frame,
-        log the tail angle, pass it to the pipe
-        This method should be called above camera frequency
-        """
-
-        fetched_image, timestamp = self.camera.fetch_image()
-        if fetched_image is None: # image not ready
-            return
-
-        # If image was actually acquired, do all the following processing
-        self.current_frame = fetched_image
-        current_angle = self.track_tail()
-
-        self.angle_buffer[self.buffer_counter] = current_angle
-        self.timestamp_buffer[self.buffer_counter] = timestamp
-        self.buffer_counter = (self.buffer_counter+1)%1000
-
 
     def track_tail(self):
         """
@@ -162,9 +152,22 @@ class MiniZFTT(QMainWindow):
         else:
             factor = 1.0
         base, tip = self.camera_panel.get_base_tip_position(factor=factor)
-        self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
-        self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
-        return angles[-1]-angles[0]
+
+        # load data from the queue
+        while not self.frame_queue.empty():
+            try:
+                self.current_frame, timestamp = self.frame_queue.get(block=False)
+                self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
+                self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
+
+                # log data
+                self.angle_buffer[self.buffer_counter] = angles[-1]-angles[0]
+                self.timestamp_buffer[self.buffer_counter] = timestamp
+                self.buffer_counter = (self.buffer_counter + 1) % 1000
+
+            except Empty:
+                continue
+
 
     def update_data_panels(self):
         """
@@ -231,7 +234,9 @@ class MiniZFTT(QMainWindow):
         Release resources for graceful exit.
         """
         self.parameters.save_config_into_json()
-        self.fetch_timer.stop()
+        self.camera.exit_acquisition_event.set()
+        self.acquisition_process.kill()
+        self.tracking_timer.stop()
         self.gui_timer.stop()
         self.camera.close()
 
@@ -241,6 +246,8 @@ Instantiate the application
 """
 
 if __name__ == '__main__':
+    # Initialize multiprocessing context -- this relates to the interpreter itself I think
+    mp.set_start_method('spawn')
     # Prepare the PyQt Application
     app = QApplication([])
     # Instantiate the main GUI window
