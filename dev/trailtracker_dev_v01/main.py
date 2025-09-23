@@ -36,6 +36,9 @@ class MiniZFTT(QMainWindow):
     Displays fish image, tail trace, and other controls.
     """
 
+    """
+    Constructor & Things that are run only once at the beginning
+    """
     def __init__(self):
         """
         The main window constructor. Called once at the beginning.
@@ -66,6 +69,9 @@ class MiniZFTT(QMainWindow):
         self.buffer_counter = 0
         self.current_segment_position = [] # only for the visualization purpose
 
+        # Setup callback functions for the control panel GUI
+        self.connect_control_callbacks()
+
         # Define timers
         self.fetch_timer = QTimer()
         self.fetch_timer.setInterval(3)  # millisecond
@@ -73,12 +79,11 @@ class MiniZFTT(QMainWindow):
 
         self.gui_timer = QTimer()
         self.gui_timer.setInterval(100)  # millisecond
-        self.gui_timer.timeout.connect(self.update_gui)  # define callback
+        self.gui_timer.timeout.connect(self.update_data_panels)  # define callback
 
 
         self.fetch_timer.start()
         self.gui_timer.start()
-
 
     def arrange_widgets(self):
         """
@@ -88,6 +93,9 @@ class MiniZFTT(QMainWindow):
         # set window title and size
         self.setWindowTitle("minizftt_dev v01")  # window title
         self.setGeometry(50, 50, 400, 600)  # default window position and size (x, y, w, h)
+
+        # Insert initial values from config into control panel GUI by passing the parameter object
+        self.control_panel.set_current_value(self.parameters)
 
         # The main window needs to have a single, central widget (which is just a empty container).
         # Widgets like buttons will be arranged inside the container later.
@@ -104,10 +112,20 @@ class MiniZFTT(QMainWindow):
         # Adjust height ratios
         layout.setStretch(0, 10)
         layout.setStretch(1, 3)
-        layout.setStretch(2, 3)
+        layout.setStretch(2, 1)
 
         container.setLayout(layout)
 
+    def connect_control_callbacks(self):
+        self.control_panel.show_raw_checkbox.stateChanged.connect(self.update_parameters)
+        self.control_panel.color_invert_checkbox.stateChanged.connect(self.update_parameters)
+        self.control_panel.image_scale_box.editingFinished.connect(self.update_parameters)
+        self.control_panel.filter_size_slider.sliderReleased.connect(self.update_parameters)
+        self.control_panel.clip_threshold_slider.sliderReleased.connect(self.update_parameters)
+
+    """
+    Methods called continuously during the run
+    """
     def fetch_and_track_tail(self):
         """
         Read frame from the camera, perform the tracking algorithm on the frame,
@@ -131,36 +149,77 @@ class MiniZFTT(QMainWindow):
         Pass parameters (manually drawn resting tail coordinates, image binzalization range etc.) to tail tracking
         functions. Tail tracking functions could be pre-compiled for the accerelation purpose, I think.
         """
-        # get the "resting tail" information from the CameraPanel
-        base, tip = self.camera_panel.get_base_tip_position()
+        # get the "resting tail" information from the CameraPanel (considering scaling, if we are viewing raw)
+        if self.parameters.show_raw:
+            factor = self.parameters.image_scale
+        else:
+            factor = 1.0
+        base, tip = self.camera_panel.get_base_tip_position(factor=factor)
         self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
-        segments, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
-        self.camera_panel.update_tracked_tail(segments)
+        self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
         return angles[-1]-angles[0]
 
-    def update_gui(self):
+    def update_data_panels(self):
         """
         Show whatever the latest frame and tail trace
         This method should be called at like 20 Hz tops
         """
+        # camera panel image update
+        if self.parameters.show_raw:
+            self.camera_panel.set_image(self.current_frame)
+            factor = 1.0 / self.parameters.image_scale
+        else:
+            self.camera_panel.set_image(self.processed_frame)
+            factor = 1.0
 
-        self.camera_panel.set_image(self.processed_frame)
+        # camera panel tracked tail line update
+        self.camera_panel.update_tracked_tail(self.current_segment_position, factor=factor)
+
+        # angle panel update
         self.angle_panel.set_data(np.roll(np.arange(1000,0,-1), self.buffer_counter), self.angle_buffer) # somehow make this smarter
 
-    def load_config(self):
+    def update_parameters(self):
         """
-        Load config from a json
-        For now dumping everything into as single parameter dict
-        This is a sloppy way of doing things
-        Maybe make dedicated state manager class with set attributes?
+        Called upon any user action on the control panel
+        Read values from the GUI widgets, put them into the parameter (if valid), and put the new value into the GUI
+        Also rescale tail standard ROI, if we toggle show_raw or rescale image
         """
 
+        # Read the current content of the GUI widgets
+        new_sr, new_inv, new_iscale, new_fsize, new_cthresh = self.control_panel.return_current_value()
 
+        # Before overwriting the old parameters, check if we need to adjust the tail ROI and do so
+        if new_sr and not self.parameters.show_raw: # if we switched from processed to raw
+            self.camera_panel.rescale_tail_standard(1 / self.parameters.image_scale)
+        if not new_sr and self.parameters.show_raw: # if we switched from raw to processed
+            self.camera_panel.rescale_tail_standard(self.parameters.image_scale)
+        if new_iscale is not None and new_iscale!=self.parameters.image_scale and not self.parameters.show_raw:
+            self.camera_panel.rescale_tail_standard(new_iscale / self.parameters.image_scale)
+
+        # Insert the new values to the parameter object
+        self.parameters.show_raw = new_sr
+        self.parameters.color_invert = new_inv
+        if new_iscale is not None:
+            self.parameters.image_scale = new_iscale
+        self.parameters.filter_size = int(new_fsize) # I think sliders return float?
+        self.parameters.clip_threshold = int(new_cthresh)
+
+        # force new values on GUI (relevant for lineedits)
+        self.control_panel.set_current_value(self.parameters)
+
+        # flag level readjustment
+        self.camera_panel.level_adjust_flag = True
+
+
+    """
+    Methods called once at the end
+    """
     def closeEvent(self, event):
         """
         This will be called when the main window is closed.
         Release resources for graceful exit.
         """
+        self.parameters.save_config_into_json()
         self.fetch_timer.stop()
         self.gui_timer.stop()
         self.camera.close()

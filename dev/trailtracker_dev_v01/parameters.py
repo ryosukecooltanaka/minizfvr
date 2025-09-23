@@ -17,6 +17,7 @@ class TailTrackerParams:
     dummy_video_path: str = './tail_movie.mp4'
 
     # image preprocessing parameters
+    show_raw: bool = True
     image_scale: float = 1.0
     filter_size: int = 3
     color_invert: bool = True

@@ -1,9 +1,9 @@
 import numpy as np
 import pyqtgraph as pg
 import sys
+from parameters import TailTrackerParams
 
-
-from PyQt5.QtCore import QSize, Qt, QTimer
+from PyQt5.QtCore import QSize, Qt, QTimer, QPointF
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -12,11 +12,13 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QVBoxLayout,
     QHBoxLayout,
+    QGridLayout,
     QLineEdit,
     QComboBox,
     QLabel,
     QSizePolicy,
-    QInputDialog
+    QInputDialog,
+    QSlider
 )
 
 
@@ -45,28 +47,39 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.display_area.addItem(self.tail_tracked)
 
         # Some other flags
-        self.init_frame_frag = True
+        self.level_adjust_flag = True # we do one-shot level adjust at start-up & parameter change
 
     def set_image(self, image):
         """ Image update method """
-        self.fish_image_item.setImage(image, autoLevels=self.init_frame_frag)
-        if self.init_frame_frag:
-            self.init_frame_frag = False
+        self.fish_image_item.setImage(image, autoLevels=self.level_adjust_flag)
+        if self.level_adjust_flag:
+            self.level_adjust_flag = False
 
-    def get_base_tip_position(self):
+    def get_base_tip_position(self, factor=1.0):
         """
         Return the current base and tip position of the tail standard (in image coordinate)
+        with factors, in case we are viewing the raw image while we opearate on scaled images
         """
-        base_x = self.tail_standard.getLocalHandlePositions(0)[1].x()
-        base_y = self.tail_standard.getLocalHandlePositions(0)[1].y()
-        tip_x = self.tail_standard.getLocalHandlePositions(1)[1].x()
-        tip_y = self.tail_standard.getLocalHandlePositions(1)[1].y()
+        base_x = self.tail_standard.getLocalHandlePositions(0)[1].x() * factor
+        base_y = self.tail_standard.getLocalHandlePositions(0)[1].y() * factor
+        tip_x = self.tail_standard.getLocalHandlePositions(1)[1].x() * factor
+        tip_y = self.tail_standard.getLocalHandlePositions(1)[1].y() * factor
         return (base_x, base_y), (tip_x, tip_y)
 
-    def update_tracked_tail(self, segments):
-        self.tail_tracked.setData(segments[0, :], segments[1, :])
+    def rescale_tail_standard(self, f):
+        """
+        When switching between showing raw and scaled images,
+        keep the tail standard in the same relative position
+        """
+        base, tip = self.get_base_tip_position()
+        for h, pos in zip(self.tail_standard.handles, (base, tip)):
+            newPos = QPointF(*[val * f for val in pos])
+            h['item'].setPos(newPos) # copied over from pyqtgraph source code -- not sure why we need item/pos
+            h['pos']= newPos
+        self.tail_standard.stateChanged() # emit signal -- I guess this calls redrawing?
 
-
+    def update_tracked_tail(self, segments, factor=1.0):
+        self.tail_tracked.setData(segments[0, :]*factor, segments[1, :]*factor)
 
 class AnglePanel(pg.GraphicsLayoutWidget):
     """
@@ -95,7 +108,78 @@ class ControlPanel(QWidget):
 
     def __init__(self):
         super().__init__()
-        layout = QHBoxLayout()
-        for i in range(4):
-            layout.addWidget(QLabel('dummy'))
-        self.setLayout(layout)
+
+        # Prepare widgets that control the parameters
+        # preprocessing parameters
+        self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
+        self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
+        self.image_scale_box = QLineEdit()
+        self.filter_size_slider = QSlider(Qt.Horizontal)
+        self.clip_threshold_slider = QSlider(Qt.Horizontal)
+        self.arrange_widget()
+
+    def arrange_widget(self):
+        """
+        Separating out arranging for visibility
+        """
+        # some necessary initialization of individual widgets
+        self.filter_size_slider.setMinimum(1)
+        self.filter_size_slider.setMaximum(10)
+        self.filter_size_slider.setSingleStep(1)
+        self.filter_size_slider.setTickInterval(1)
+        self.filter_size_slider.setTickPosition(QSlider.TicksBelow)
+
+        self.clip_threshold_slider.setMinimum(0)
+        self.clip_threshold_slider.setMaximum(255)
+        self.clip_threshold_slider.setTickInterval(32)
+        self.clip_threshold_slider.setTickPosition(QSlider.TicksBelow)
+
+        # arrange preprocessing control widget into a grid layout
+        preproc_grid = QGridLayout()
+        preproc_grid.addWidget(self.show_raw_checkbox, 0, 0, 1, 1) # row, col, rowspan, colspan
+        preproc_grid.addWidget(self.color_invert_checkbox, 1, 0, 1, 1)
+        preproc_grid.addWidget(QLabel("Image Scale"), 0, 1, 1, 1, Qt.AlignCenter)
+        preproc_grid.addWidget(self.image_scale_box,  1, 1, 1, 1)
+        preproc_grid.addWidget(QLabel("Filter Size"),  0, 2, 1, 1, Qt.AlignCenter)
+        preproc_grid.addWidget(self.filter_size_slider, 1, 2, 1, 1)
+        preproc_grid.addWidget(QLabel("Clip Threshold"),  0, 3, 1, 1, Qt.AlignCenter)
+        preproc_grid.addWidget(self.clip_threshold_slider, 1, 3, 1, 1)
+
+        # Cosmetic size adjustment
+        self.image_scale_box.setMaximumWidth(50)
+        preproc_grid.setColumnStretch(2, 2)
+        preproc_grid.setColumnStretch(3, 2)
+
+        self.setLayout(preproc_grid)
+
+    def set_current_value(self, p:TailTrackerParams):
+        """
+        Given the TailTrackerParam object, set the values of the widgets
+        """
+        self.show_raw_checkbox.setChecked(p.show_raw)
+        self.color_invert_checkbox.setChecked(p.color_invert)
+        self.image_scale_box.setText(str(p.image_scale))
+        self.filter_size_slider.setValue(p.filter_size)
+        self.clip_threshold_slider.setValue(p.clip_threshold)
+
+    def return_current_value(self):
+        """
+        Does what it does + type check on the LineEdit inputs
+        """
+
+        image_scale_text_content = self.image_scale_box.text()
+        try:
+            image_scale_float = float(image_scale_text_content)
+        except:
+            image_scale_float = None
+
+        return self.show_raw_checkbox.isChecked(),\
+               self.color_invert_checkbox.isChecked(),\
+               image_scale_float,\
+               self.filter_size_slider.value(),\
+               self.clip_threshold_slider.value()
+
+
+
+
+
