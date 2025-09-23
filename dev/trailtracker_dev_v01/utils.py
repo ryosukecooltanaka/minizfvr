@@ -82,7 +82,7 @@ def find_tip_with_com(image, bx, by, dx, dy, lseg, radius):
     # return values can be exactly interpreted as base_x/y, dx/y for the next iteration
     return bx + new_dx, by + new_dy, new_dx, new_dy
 
-def preprocess_image(img, image_scale=1, filter_size=3, color_invert=False, clip_threshold=0):
+def preprocess_image(img, image_scale=1, filter_size=3, color_invert=False, clip_threshold=0, **kwargs):
     """
     Image preprocessing for tail tracking, as in stytra
     cv2 is precompiled and is very fast

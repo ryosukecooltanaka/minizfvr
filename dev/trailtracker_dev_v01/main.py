@@ -13,26 +13,20 @@ tracking app.
 """
 
 import numpy as np
-import pyqtgraph as pg
 import sys
 from camera import SelectCameraByName
 from panels import CameraPanel, AnglePanel, ControlPanel
 from utils import center_of_mass_based_tracking, preprocess_image
+from parameters import TailTrackerParams
+import os
+import json
 
-from PyQt5.QtCore import QSize, Qt, QTimer
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
     QMainWindow,
-    QPushButton,
-    QCheckBox,
-    QVBoxLayout,
-    QHBoxLayout,
-    QLineEdit,
-    QComboBox,
-    QLabel,
-    QSizePolicy,
-    QInputDialog
+    QVBoxLayout
 )
 
 
@@ -50,6 +44,10 @@ class MiniZFTT(QMainWindow):
         # Call the parental (QMainWindow) constructor
         super().__init__()
 
+        # Load config from file, as it is used for initialization
+        self.parameters = TailTrackerParams()
+        self.parameters.load_config_from_json()
+
         # Create other widgets & arrange them
         self.camera_panel = CameraPanel()
         self.angle_panel = AnglePanel()
@@ -57,7 +55,8 @@ class MiniZFTT(QMainWindow):
         self.arrange_widgets()
 
         # initialize camera
-        self.camera = SelectCameraByName('dummy', video_path='./tail_movie.mp4')
+        self.camera = SelectCameraByName(self.parameters.camera_type,
+                                         video_path=self.parameters.dummy_video_path)
 
         # Prepare attributes to store loaded images & the results of the tail tracking
         self.current_frame = None
@@ -66,11 +65,6 @@ class MiniZFTT(QMainWindow):
         self.timestamp_buffer = np.full(1000, np.nan)
         self.buffer_counter = 0
         self.current_segment_position = [] # only for the visualization purpose
-
-        # store miscellaneous parameters that might be loaded from a json config file and
-        # can be controlled through the GUI as a dict
-        self.parameters = dict()
-        self.load_config()
 
         # Define timers
         self.fetch_timer = QTimer()
@@ -139,7 +133,7 @@ class MiniZFTT(QMainWindow):
         """
         # get the "resting tail" information from the CameraPanel
         base, tip = self.camera_panel.get_base_tip_position()
-        self.processed_frame = preprocess_image(self.current_frame, **self.parameters)
+        self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
         segments, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
         self.camera_panel.update_tracked_tail(segments)
         return angles[-1]-angles[0]
@@ -154,10 +148,13 @@ class MiniZFTT(QMainWindow):
         self.angle_panel.set_data(np.roll(np.arange(1000,0,-1), self.buffer_counter), self.angle_buffer) # somehow make this smarter
 
     def load_config(self):
-        self.parameters['image_scale'] = 0.25
-        self.parameters['filter_size'] = 5
-        self.parameters['color_invert'] = True
-        self.parameters['clip_threshold'] = 190
+        """
+        Load config from a json
+        For now dumping everything into as single parameter dict
+        This is a sloppy way of doing things
+        Maybe make dedicated state manager class with set attributes?
+        """
+
 
     def closeEvent(self, event):
         """
