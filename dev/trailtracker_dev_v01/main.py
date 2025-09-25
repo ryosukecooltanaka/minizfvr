@@ -20,6 +20,7 @@ import numpy as np
 import sys
 import multiprocessing as mp
 from queue import Empty
+import time
 
 from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import (
@@ -64,7 +65,7 @@ class MiniZFTT(QMainWindow):
         self.message_strip = QLabel()
         self.arrange_widgets()
 
-        # initialize camera
+        # Select camera
         self.camera = SelectCameraByName(self.parameters.camera_type, **self.parameters.__dict__)
 
         # Prepare attributes to store loaded images & the results of the tail tracking etc.
@@ -78,7 +79,11 @@ class MiniZFTT(QMainWindow):
         # Setup callback functions for the control panel GUI
         self.connect_control_callbacks()
 
-        # multiprocessing stuff
+        # Delegate frame acquisition to a child process
+        # By calling mp.Process, we create a child process and send a copy of the self.camera there.
+        # The camera object will be Pickled to be copied, and there are certain things that cannot be pickled.
+        # For this reason, we call the camera initialization in the child process, at the beginning of the
+        # continuous acquisition process.
         self.frame_queue = mp.Queue() # this will store tuples of (frame, timestamp)
         self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.frame_queue,))
 
@@ -234,6 +239,7 @@ class MiniZFTT(QMainWindow):
         """
         self.parameters.save_config_into_json() # save current config to the file
         self.camera.exit_acquisition_event.set() # ping the child process, exit acquisition while loop
+        time.sleep(0.01) # Just to make sure that we see the end of acquisition loop before killing the process...
         self.acquisition_process.kill() # kill the child process
         self.tracking_timer.stop()
         self.gui_timer.stop()

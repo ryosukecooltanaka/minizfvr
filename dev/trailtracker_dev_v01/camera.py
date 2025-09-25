@@ -19,6 +19,10 @@ class Camera():
     do the initialization in the child process (after pickle-copy).
     """
     def __init__(self, **kwargs):
+        """
+        We are setting redundant **kwargs as an argument, so we can just dump the parameter dict() to create
+        camera objects, without them complaining about unexpected input arguments
+        """
         self.camera = None
         self.exit_acquisition_event = mp.Event() # this is a flag used to exit while loop, shared across processes
 
@@ -49,6 +53,7 @@ class Camera():
             fetch_success, frame, timestamp = self.fetch_image()
             if fetch_success:
                 queue.put((frame, timestamp))
+        print('Exited continuous acquisition')
         self.close()
 
 
@@ -57,7 +62,7 @@ class PointGreyCamera(Camera):
     Point Grey Camera. Uses Spinnaker (PySpin)
     """
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         self.system = PySpin.System.GetInstance()
         self.camera = self.system.GetCameras()[0]
 
@@ -89,7 +94,7 @@ class DummyCamera(Camera):
     Load video of an embedded fish, and return frames
     """
     def __init__(self, dummy_video_path, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__()
         self.video = None
         self.frame_counter = 0
         self.video_path = dummy_video_path
@@ -120,15 +125,16 @@ class DummyCamera(Camera):
 
 
 
-def SelectCameraByName(camera_name=None, **kwargs):
+def SelectCameraByName(camera_name, **kwargs):
     """
     Main GUI program calls this function to get the camera object.
     The camera_name should be somehow specified in a config file etc.
     """
+    event = mp.Event()
     if camera_name=='pointgrey':
-        camera = PointGreyCamera(**kwargs)
+        camera = PointGreyCamera()
     elif camera_name=='dummy':
         camera = DummyCamera(**kwargs)
     else:
-        camera = Camera(**kwargs)
+        camera = Camera()
     return camera
