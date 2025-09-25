@@ -37,6 +37,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
         self.tail_standard = pg.LineSegmentROI([(10, 10), (100, 100)])
         self.tail_standard.setPen(dict(color=(5, 40, 200), width=3))
+        self.tail_standard.translatable = False # prevent inadvertently adding weird offsets
         self.tail_tracked = pg.PlotCurveItem()
         self.tail_tracked.setPen(dict(color=(245, 30, 200), width=3))
 
@@ -51,9 +52,10 @@ class CameraPanel(pg.GraphicsLayoutWidget):
 
     def set_image(self, image):
         """ Image update method """
-        self.fish_image_item.setImage(image, autoLevels=self.level_adjust_flag)
-        if self.level_adjust_flag:
-            self.level_adjust_flag = False
+        if image is not None:
+            self.fish_image_item.setImage(image, autoLevels=self.level_adjust_flag)
+            if self.level_adjust_flag:
+                self.level_adjust_flag = False
 
     def get_base_tip_position(self, factor=1.0):
         """

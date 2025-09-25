@@ -12,12 +12,20 @@ import multiprocessing as mp
 class Camera():
     """
     Camera object archetype
+    Camera acquisition will be delegated to a child process using the multiprocessing module.
+    To do this, the instantiated Camera object will be Picked and sent to a different processor.
+    Certain objects (e.g., stuff that has non-python backend) cannot be pickled.
+    So the safest thing is to provide necessary metadata for data acquisition in the constructor, and
+    do the initialization in the child process (after pickle-copy).
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         self.camera = None
         self.exit_acquisition_event = mp.Event() # this is a flag used to exit while loop, shared across processes
 
     def initialize(self, **kwargs):
+        """
+        Called in the child process at the beginning of continuous acquisition!
+        """
         pass
 
     def fetch_image(self):
@@ -34,19 +42,22 @@ class Camera():
     def continuously_acquire_frames(self, queue):
         """
         Fetch frames as fast as possible, and put acquired frames into the queue with timestamps
+        This will run in the child process!
         """
+        self.initialize()
         while not self.exit_acquisition_event.is_set():
             fetch_success, frame, timestamp = self.fetch_image()
             if fetch_success:
                 queue.put((frame, timestamp))
+        self.close()
 
 
 class PointGreyCamera(Camera):
     """
     Point Grey Camera. Uses Spinnaker (PySpin)
     """
-    def __init__(self):
-        super().__init__()
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
         self.system = PySpin.System.GetInstance()
         self.camera = self.system.GetCameras()[0]
 
@@ -77,40 +88,31 @@ class DummyCamera(Camera):
     """
     Load video of an embedded fish, and return frames
     """
-    def __init__(self):
-        super().__init__()
-        self.camera = []
+    def __init__(self, dummy_video_path, **kwargs):
+        super().__init__(**kwargs)
         self.video = None
         self.frame_counter = 0
-        self.video_path = None
+        self.video_path = dummy_video_path
 
-    def initialize(self, video_path='tail_movie.mp4'):
-        self.video_path = video_path
+    def initialize(self):
+        """
+        Called in the child process
+        VideoCapture is a non-Picklable object so this is important
+        """
+        self.frame_counter = 0
+        self.video = cv2.VideoCapture(self.video_path)
 
-    # TODO: This is hacky! fix
-    def fetch_image(self, capture_object):
-        if self.frame_counter == capture_object.get(cv2.CAP_PROP_FRAME_COUNT):
-            capture_object.set(cv2.CAP_PROP_POS_FRAMES,0)
+    def fetch_image(self):
+        if self.frame_counter == self.video.get(cv2.CAP_PROP_FRAME_COUNT):
+            self.video.set(cv2.CAP_PROP_POS_FRAMES,0)
             self.frame_counter = 0
 
-        read_success, frame = capture_object.read()
+        read_success, frame = self.video.read()
         if read_success:
             self.frame_counter += 1
             return True, frame[:, :, 0], time.time()
         else:
             return False, None, time.time()
-
-    def continuously_acquire_frames(self, queue):
-        """
-        Fetch frames as fast as possible, and put acquired frames into the queue with timestamps
-        """
-
-        capture_object = cv2.VideoCapture(self.video_path)
-
-        while not self.exit_acquisition_event.is_set():
-            fetch_success, frame, timestamp = self.fetch_image(capture_object)
-            if fetch_success:
-                queue.put((frame, timestamp))
 
     def close(self):
         self.video.release()
@@ -124,10 +126,9 @@ def SelectCameraByName(camera_name=None, **kwargs):
     The camera_name should be somehow specified in a config file etc.
     """
     if camera_name=='pointgrey':
-        camera = PointGreyCamera()
+        camera = PointGreyCamera(**kwargs)
     elif camera_name=='dummy':
-        camera = DummyCamera()
+        camera = DummyCamera(**kwargs)
     else:
-        camera = Camera()
-    camera.initialize(**kwargs)
+        camera = Camera(**kwargs)
     return camera

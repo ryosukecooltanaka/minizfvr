@@ -65,8 +65,7 @@ class MiniZFTT(QMainWindow):
         self.arrange_widgets()
 
         # initialize camera
-        self.camera = SelectCameraByName(self.parameters.camera_type,
-                                         video_path=self.parameters.dummy_video_path)
+        self.camera = SelectCameraByName(self.parameters.camera_type, **self.parameters.__dict__)
 
         # Prepare attributes to store loaded images & the results of the tail tracking etc.
         self.current_frame = None # the latest raw frame
@@ -74,7 +73,7 @@ class MiniZFTT(QMainWindow):
         self.angle_buffer = np.full(1000, np.nan) # size should be specified by config etc.
         self.timestamp_buffer = np.full(1000, np.nan)
         self.buffer_counter = 0
-        self.current_segment_position = [] # store segment position only for the visualization purpose
+        self.current_segment_position = np.zeros((2, self.parameters.n_segments)) # store segment position only for the visualization purpose
 
         # Setup callback functions for the control panel GUI
         self.connect_control_callbacks()
@@ -158,7 +157,7 @@ class MiniZFTT(QMainWindow):
             try:
                 self.current_frame, timestamp = self.frame_queue.get(block=False)
                 self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
-                self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, 7, 15)
+                self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, self.parameters.n_segments, self.parameters.search_area)
 
                 # log data
                 self.angle_buffer[self.buffer_counter] = angles[-1]-angles[0]
@@ -233,12 +232,11 @@ class MiniZFTT(QMainWindow):
         This will be called when the main window is closed.
         Release resources for graceful exit.
         """
-        self.parameters.save_config_into_json()
-        self.camera.exit_acquisition_event.set()
-        self.acquisition_process.kill()
+        self.parameters.save_config_into_json() # save current config to the file
+        self.camera.exit_acquisition_event.set() # ping the child process, exit acquisition while loop
+        self.acquisition_process.kill() # kill the child process
         self.tracking_timer.stop()
         self.gui_timer.stop()
-        self.camera.close()
 
 
 """

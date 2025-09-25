@@ -23,6 +23,10 @@ class TailTrackerParams:
     color_invert: bool = True
     clip_threshold: int = 0
 
+    # tracking algo parameters
+    n_segments: int = 7
+    search_area: int = 15
+
     def load_config_from_json(self, config_path = './config.json'):
         if os.path.isfile(config_path):
             print('Loading parameters from from ', config_path)
