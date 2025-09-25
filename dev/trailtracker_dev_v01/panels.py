@@ -2,10 +2,10 @@ import numpy as np
 import pyqtgraph as pg
 import sys
 from parameters import TailTrackerParams
+from utils import TypeForcedEdit
 
 from PyQt5.QtCore import QSize, Qt, QTimer, QPointF
 from PyQt5.QtWidgets import (
-    QApplication,
     QWidget,
     QMainWindow,
     QPushButton,
@@ -28,14 +28,14 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     It holds image from camera + tail standard + tracked tail
     """
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+    def __init__(self, *args, base_x, base_y, tip_x, tip_y, **kwargs):
+        super().__init__()
         # This is the "GraphicsItem" that is added to the widget
         self.display_area = pg.ViewBox(invertY=True, lockAspect=True)  # this graphics item implements easy scaling
 
         # Objects to be added to the View Box
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
-        self.tail_standard = pg.LineSegmentROI([(10, 10), (100, 100)])
+        self.tail_standard = pg.LineSegmentROI([(base_x, base_y), (tip_x, tip_y)])
         self.tail_standard.setPen(dict(color=(5, 40, 200), width=3))
         self.tail_standard.translatable = False # prevent inadvertently adding weird offsets
         self.tail_tracked = pg.PlotCurveItem()
@@ -78,7 +78,6 @@ class CameraPanel(pg.GraphicsLayoutWidget):
             newPos = QPointF(*[val * f for val in pos])
             h['item'].setPos(newPos) # copied over from pyqtgraph source code -- not sure why we need item/pos
             h['pos']= newPos
-        self.tail_standard.stateChanged() # emit signal -- I guess this calls redrawing?
 
     def update_tracked_tail(self, segments, factor=1.0):
         self.tail_tracked.setData(segments[0, :]*factor, segments[1, :]*factor)
@@ -115,7 +114,7 @@ class ControlPanel(QWidget):
         # preprocessing parameters
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
-        self.image_scale_box = QLineEdit()
+        self.image_scale_box = TypeForcedEdit(float)
         self.filter_size_slider = QSlider(Qt.Horizontal)
         self.clip_threshold_slider = QSlider(Qt.Horizontal)
         self.arrange_widget()
@@ -160,7 +159,7 @@ class ControlPanel(QWidget):
         """
         self.show_raw_checkbox.setChecked(p.show_raw)
         self.color_invert_checkbox.setChecked(p.color_invert)
-        self.image_scale_box.setText(str(p.image_scale))
+        self.image_scale_box.setValue(p.image_scale)
         self.filter_size_slider.setValue(p.filter_size)
         self.clip_threshold_slider.setValue(p.clip_threshold)
 
@@ -169,15 +168,9 @@ class ControlPanel(QWidget):
         Does what it does + type check on the LineEdit inputs
         """
 
-        image_scale_text_content = self.image_scale_box.text()
-        try:
-            image_scale_float = float(image_scale_text_content)
-        except:
-            image_scale_float = None
-
         return self.show_raw_checkbox.isChecked(),\
                self.color_invert_checkbox.isChecked(),\
-               image_scale_float,\
+               self.image_scale_box.value(),\
                self.filter_size_slider.value(),\
                self.clip_threshold_slider.value()
 

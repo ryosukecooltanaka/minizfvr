@@ -25,6 +25,7 @@ class Camera():
         """
         self.camera = None
         self.exit_acquisition_event = mp.Event() # this is a flag used to exit while loop, shared across processes
+        self.ii = 0
 
     def initialize(self, **kwargs):
         """
@@ -53,6 +54,9 @@ class Camera():
             fetch_success, frame, timestamp = self.fetch_image()
             if fetch_success:
                 queue.put((frame, timestamp))
+                self.ii += 1
+                if self.ii % 100 == 0:
+                    print('Read frame',self.ii)
         print('Exited continuous acquisition')
         self.close()
 

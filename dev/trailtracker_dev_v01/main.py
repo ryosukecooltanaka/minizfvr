@@ -34,6 +34,7 @@ from PyQt5.QtWidgets import (
 from camera import SelectCameraByName
 from panels import CameraPanel, AnglePanel, ControlPanel
 from utils import center_of_mass_based_tracking, preprocess_image
+from tracker import TrackerObject
 from parameters import TailTrackerParams
 
 
@@ -59,14 +60,16 @@ class MiniZFTT(QMainWindow):
         self.parameters.load_config_from_json()
 
         # Create other widgets & arrange them
-        self.camera_panel = CameraPanel()
+        self.camera_panel = CameraPanel(**self.parameters.__dict__)
         self.angle_panel = AnglePanel()
         self.control_panel = ControlPanel()
         self.message_strip = QLabel()
         self.arrange_widgets()
 
-        # Select camera
+        # Select camera / create a camera object
         self.camera = SelectCameraByName(self.parameters.camera_type, **self.parameters.__dict__)
+        # Create a tracking object
+        self.tracker = TrackerObject(self.parameters.__dict__)
 
         # Prepare attributes to store loaded images & the results of the tail tracking etc.
         self.current_frame = None # the latest raw frame
@@ -85,20 +88,22 @@ class MiniZFTT(QMainWindow):
         # For this reason, we call the camera initialization in the child process, at the beginning of the
         # continuous acquisition process.
         self.frame_queue = mp.Queue() # this will store tuples of (frame, timestamp)
-        self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.frame_queue,))
+        self.param_queue = mp.Queue() # passing parameters to the tracking process
+        self.result_queue = mp.Queue() # results of the tracking
 
-        # Do tracking (read frames from the queue, perform tracking)
-        self.tracking_timer = QTimer()
-        self.tracking_timer.setInterval(10) # should be faster than stimuli
-        self.tracking_timer.timeout.connect(self.track_tail)
+        self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.frame_queue,))
+        self.tracking_process = mp.Process(target=self.tracker.continuously_track_tail, args=(self.frame_queue, self.param_queue, self.result_queue, ))
+        self.acquisition_process.daemon = True
+        self.tracking_process.daemon = True
+
 
         # update GUI (i.e., camera panel) at 10 Hz
         self.gui_timer = QTimer()
-        self.gui_timer.setInterval(100)  # millisecond
+        self.gui_timer.setInterval(10)  # millisecond
         self.gui_timer.timeout.connect(self.update_data_panels)  # define callback
 
         self.acquisition_process.start()
-        self.tracking_timer.start()
+        self.tracking_process.start()
         self.gui_timer.start()
 
     def arrange_widgets(self):
@@ -135,6 +140,7 @@ class MiniZFTT(QMainWindow):
         container.setLayout(layout)
 
     def connect_control_callbacks(self):
+        self.camera_panel.tail_standard.sigRegionChangeFinished.connect(self.update_parameters)
         self.control_panel.show_raw_checkbox.stateChanged.connect(self.update_parameters)
         self.control_panel.color_invert_checkbox.stateChanged.connect(self.update_parameters)
         self.control_panel.image_scale_box.editingFinished.connect(self.update_parameters)
@@ -145,39 +151,31 @@ class MiniZFTT(QMainWindow):
     Methods called continuously during the run
     """
 
-    def track_tail(self):
+    def log_data(self):
         """
-        Pass parameters (manually drawn resting tail coordinates, image binzalization range etc.) to tail tracking
-        functions. Tail tracking functions could be pre-compiled for the accerelation purpose, I think.
+        Read the result_queue
         """
-        # get the "resting tail" information from the CameraPanel (considering scaling, if we are viewing raw)
-        if self.parameters.show_raw:
-            factor = self.parameters.image_scale
-        else:
-            factor = 1.0
-        base, tip = self.camera_panel.get_base_tip_position(factor=factor)
 
-        # load data from the queue
-        while not self.frame_queue.empty():
+        while not self.result_queue.empty():
             try:
-                self.current_frame, timestamp = self.frame_queue.get(block=False)
-                self.processed_frame = preprocess_image(self.current_frame, **self.parameters.__dict__)
-                self.current_segment_position, angles = center_of_mass_based_tracking(self.processed_frame, base, tip, self.parameters.n_segments, self.parameters.search_area)
-
-                # log data
+                self.current_frame, self.processed_frame, timestamp, self.current_segment_position, angles = self.result_queue.get()
                 self.angle_buffer[self.buffer_counter] = angles[-1]-angles[0]
                 self.timestamp_buffer[self.buffer_counter] = timestamp
-                self.buffer_counter = (self.buffer_counter + 1) % 1000
+                self.buffer_counter = (self.buffer_counter+1)%len(self.angle_buffer)
+                if self.buffer_counter % 100 == 0:
+                    print('logged data point #', self.buffer_counter)
 
             except Empty:
                 continue
 
-
     def update_data_panels(self):
         """
-        Show whatever the latest frame and tail trace
+        Update Camera and Angle Panels
         This method should be called at like 20 Hz tops
         """
+
+        self.log_data()
+
         # camera panel image update
         if self.parameters.show_raw:
             self.camera_panel.set_image(self.current_frame)
@@ -198,7 +196,7 @@ class MiniZFTT(QMainWindow):
 
     def update_parameters(self):
         """
-        Called upon any user action on the control panel
+        Called upon any user action on the ControlPanel or movements of the tail standard.
         Read values from the GUI widgets, put them into the parameter (if valid), and put the new value into the GUI
         Also rescale tail standard ROI, if we toggle show_raw or rescale image
         """
@@ -211,22 +209,32 @@ class MiniZFTT(QMainWindow):
             self.camera_panel.rescale_tail_standard(1 / self.parameters.image_scale)
         if not new_sr and self.parameters.show_raw: # if we switched from raw to processed
             self.camera_panel.rescale_tail_standard(self.parameters.image_scale)
-        if new_iscale is not None and new_iscale!=self.parameters.image_scale and not self.parameters.show_raw:
+        if new_iscale!=self.parameters.image_scale and not self.parameters.show_raw: # if we changed the scale
             self.camera_panel.rescale_tail_standard(new_iscale / self.parameters.image_scale)
 
         # Insert the new values to the parameter object
         self.parameters.show_raw = new_sr
         self.parameters.color_invert = new_inv
-        if new_iscale is not None:
-            self.parameters.image_scale = new_iscale
+        self.parameters.image_scale = new_iscale
         self.parameters.filter_size = int(new_fsize) # I think sliders return float?
         self.parameters.clip_threshold = int(new_cthresh)
+
+        # also log tail standard position into parameter object, so we can easily pass them to the tracking process
+        factor = 1.0
+        if self.parameters.show_raw:
+            factor = self.parameters.image_scale
+        base, tip = self.camera_panel.get_base_tip_position(factor)
+        self.parameters.base_x, self.parameters.base_y = base
+        self.parameters.tip_x, self.parameters.tip_y = tip
 
         # force new values on GUI (relevant for lineedits)
         self.control_panel.set_current_value(self.parameters)
 
         # flag level readjustment
         self.camera_panel.level_adjust_flag = True
+
+        # Send parameter to the child process running the tracker through the queue
+        self.param_queue.put(self.parameters.__dict__)
 
 
     """
@@ -239,8 +247,10 @@ class MiniZFTT(QMainWindow):
         """
         self.parameters.save_config_into_json() # save current config to the file
         self.camera.exit_acquisition_event.set() # ping the child process, exit acquisition while loop
+        self.tracker.exit_acquisition_event.set()
         time.sleep(0.01) # Just to make sure that we see the end of acquisition loop before killing the process...
         self.acquisition_process.kill() # kill the child process
+        self.tracking_process.kill()
         self.tracking_timer.stop()
         self.gui_timer.stop()
 

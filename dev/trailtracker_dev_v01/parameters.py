@@ -24,6 +24,10 @@ class TailTrackerParams:
     clip_threshold: int = 0
 
     # tracking algo parameters
+    base_x: float = 10.0  # in the post-rescaling coordinate
+    base_y: float = 10.0
+    tip_x: float = 100.0
+    tip_y: float = 100.0
     n_segments: int = 7
     search_area: int = 15
 
@@ -32,16 +36,22 @@ class TailTrackerParams:
             print('Loading parameters from from ', config_path)
             with open(config_path, 'r') as f:
                 config_dict = json.load(f)
-                for key in config_dict.keys():
-                    if hasattr(self, key): # so we don't inject weird attributes
-                        setattr(self, key, config_dict[key])
-                        print('loaded', key, '=', config_dict[key])
-                    else:
-                        print(key, 'is not a valid parameter name!')
+                self.read_param_from_dict(config_dict, verbose=True)
 
     def save_config_into_json(self, config_path = './config.json'):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(self.__dict__, f, ensure_ascii=False, indent=4)
+
+    def read_param_from_dict(self, param_dict, verbose=False):
+        for key in param_dict.keys():
+            if hasattr(self, key):  # so we don't inject weird attributes
+                setattr(self, key, param_dict[key])
+                if verbose:
+                    print('loaded', key, '=', param_dict[key])
+            else:
+                if verbose:
+                    print(key, 'is not a valid parameter name!')
+
 
 
 

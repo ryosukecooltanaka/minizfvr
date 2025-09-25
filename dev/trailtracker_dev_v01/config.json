@@ -2,10 +2,14 @@
     "camera_type": "dummy",
     "dummy_video_path": "./tail_movie.mp4",
     "show_raw": false,
-    "image_scale": 0.5,
-    "filter_size": 2,
+    "image_scale": 0.25,
+    "filter_size": 4,
     "color_invert": true,
     "clip_threshold": 190,
+    "base_x": 163.25084281183493,
+    "base_y": 67.24727218241726,
+    "tip_x": 168.6329043958724,
+    "tip_y": 163.0480571157712,
     "n_segments": 7,
     "search_area": 15
 }
