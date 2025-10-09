@@ -1,6 +1,7 @@
 import numpy as np
 import sys
 import multiprocessing as mp
+from multiprocessing import shared_memory
 from queue import Empty
 import time
 
@@ -18,9 +19,16 @@ class TrackerObject():
     def __init__(self, param_dict):
         self.param = param_dict # this will be a parameter dictionary
         self.exit_acquisition_event = mp.Event()  # this is a flag used to exit while loop, shared across processes
+
+        # placeholder for a dict of shared memory handles -- to be initialized upon the process start
+        self.shared_memories = None
+        # placeholder for a dict of ndarrays based off of the shared memory content
+        self.shared_arrays = None
+
+        # A counter for angle history buffer update
         self.ii = 0
 
-    def continuously_track_tail(self, frame_queue, param_queue, result_queue):
+    def continuously_track_tail(self, frame_queue, param_queue):
         """
         Continuously perform tail tracking (run in a child process)
         Read frames and parameters from the queues
@@ -28,31 +36,89 @@ class TrackerObject():
         """
         print('Start tracking process')
 
+        self.receive_parameter(param_queue) # get the initial parameter (needed for shared memory initialization)
+        self.initialize_shared_memory()
+
         while not self.exit_acquisition_event.is_set():
             # check parameter queue for new parameters -- parameter change happens very infrequently,
             # so I will assume that the param_queue is either empty or has only one entry
-            if not param_queue.empty():
-                try: # expect to receive parameter as dict
-                    print('New parameter received by the child process')
-                    self.param = param_queue.get()
-                except:
-                    print('invalid object was passed to the parameter queue')
+            self.receive_parameter(param_queue)
 
             # Process frames in the queue
             while not frame_queue.empty():
                 try:
+                    # get the content of the frame queue (from the camera process)
                     frame, timestamp = frame_queue.get(block=False)
+                    # do the preprocessing
                     processed_frame = preprocess_image(frame, **self.param)
+                    # do the tracking
                     segments, angles = center_of_mass_based_tracking(processed_frame,
                                                                      (self.param['base_x'], self.param['base_y']),
                                                                      (self.param['tip_x'], self.param['tip_y']),
                                                                       self.param['n_segments'],
                                                                       self.param['search_area'])
-                    result_queue.put((frame, processed_frame, timestamp, segments, angles))
-                    self.ii += 1
-                    if self.ii % 100 == 0:
-                        print('processed frame', self.ii)
+                    # send tracking results to stimulus program through the named pipe
+                    self.send_angle_through_pipe(angles[-1]-angles[0], timestamp)
+
+                    # write results into the shared memory array so the main process can see it
+                    if self.param['show_raw']:
+                        self.encode_frame_to_array(frame)
+                    else:
+                        self.encode_frame_to_array(processed_frame)
+                    self.shared_arrays['current_segment'][:, :self.param['n_segments']+1] = segments[:]
+                    self.shared_arrays['angle_history'][self.ii] = angles[-1] - angles[0]
+
+                    self.ii = (self.ii + 1) % self.param['angle_trace_length']
+
                 except Empty:
                     continue
 
         print('Exited tracking while loop')
+        [self.shared_memories[x].close() for x in self.shared_memories.keys()]
+
+    def receive_parameter(self, queue):
+        """
+        Does what it says
+        """
+        if not queue.empty():
+            try:  # expect to receive parameter as dict
+                print('New parameter received by the child process')
+                self.param = queue.get()
+            except:
+                print('invalid object was passed to the parameter queue')
+
+    def initialize_shared_memory(self):
+        """
+        Create handles for shared memories (referred to by names) as well as numpy arrays that refer to these
+        memory addresses.
+        Organizing them in a list just because I wanted to have some hiearchy...
+        """
+
+        self.shared_memories = dict(
+            frame_memory   = shared_memory.SharedMemory(name='frame_memory'),
+            segment_memory = shared_memory.SharedMemory(name='segment_memory'),
+            angle_memory   = shared_memory.SharedMemory(name='angle_memory')
+        )
+
+        self.shared_arrays = dict(
+            current_frame   = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['frame_memory'].buf),
+            current_segment = np.ndarray((2, 10), dtype=np.float64, buffer=self.shared_memories['segment_memory'].buf),
+            angle_history   = np.ndarray((self.param['angle_trace_length'],), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
+        )
+
+    def encode_frame_to_array(self, img):
+        """
+        Flatten the raw or preprocessed image and put them into the shared memory-based 1d array
+        Also pass the desired image size at the end of this array
+        """
+        self.shared_arrays['current_frame'][:img.size] = img.ravel()
+        self.shared_arrays['current_frame'][-4] = img.shape[0]//255
+        self.shared_arrays['current_frame'][-3] = img.shape[0]%255
+        self.shared_arrays['current_frame'][-2] = img.shape[1]//255
+        self.shared_arrays['current_frame'][-1] = img.shape[1]%255
+
+    def send_angle_through_pipe(self, tail_angle, timestamp):
+        """
+        Send tracking results to whatever stimulus presentation program through the named Pipe
+        """
+        pass

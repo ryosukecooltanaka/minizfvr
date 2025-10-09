@@ -31,6 +31,9 @@ class TailTrackerParams:
     n_segments: int = 7
     search_area: int = 15
 
+    # visualization related parameters
+    angle_trace_length: int = 1000
+
     def load_config_from_json(self, config_path = './config.json'):
         if os.path.isfile(config_path):
             print('Loading parameters from from ', config_path)

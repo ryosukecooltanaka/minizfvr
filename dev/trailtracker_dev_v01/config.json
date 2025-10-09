@@ -3,13 +3,14 @@
     "dummy_video_path": "./tail_movie.mp4",
     "show_raw": false,
     "image_scale": 0.25,
-    "filter_size": 4,
+    "filter_size": 6,
     "color_invert": true,
-    "clip_threshold": 190,
-    "base_x": 163.25084281183493,
-    "base_y": 67.24727218241726,
-    "tip_x": 168.6329043958724,
-    "tip_y": 163.0480571157712,
+    "clip_threshold": 193,
+    "base_x": 162.27956502399127,
+    "base_y": 64.33343881888625,
+    "tip_x": 161.8339598809666,
+    "tip_y": 160.13422375224013,
     "n_segments": 7,
-    "search_area": 15
+    "search_area": 15,
+    "angle_trace_length": 1000
 }

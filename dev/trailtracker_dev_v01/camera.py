@@ -44,10 +44,9 @@ class Camera():
     def close(self):
         pass
 
-    def continuously_acquire_frames(self, queue):
+    def continuously_acquire_frames(self, shared_array):
         """
-        Fetch frames as fast as possible, and put acquired frames into the queue with timestamps
-        This will run in the child process!
+        Fetch frames as fast as possible, and put acquired frames into the numpy array based off of shared memory
         """
         self.initialize()
         while not self.exit_acquisition_event.is_set():
