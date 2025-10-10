@@ -5,7 +5,7 @@ from multiprocessing import shared_memory
 from queue import Empty
 import time
 
-from utils import preprocess_image, center_of_mass_based_tracking
+from utils import preprocess_image, center_of_mass_based_tracking, encode_frame_to_array, decode_array_to_frame
 
 class TrackerObject():
     """
@@ -28,7 +28,7 @@ class TrackerObject():
         # A counter for angle history buffer update
         self.ii = 0
 
-    def continuously_track_tail(self, frame_queue, param_queue):
+    def continuously_track_tail(self, timestamp_queue, param_queue):
         """
         Continuously perform tail tracking (run in a child process)
         Read frames and parameters from the queues
@@ -44,34 +44,31 @@ class TrackerObject():
             # so I will assume that the param_queue is either empty or has only one entry
             self.receive_parameter(param_queue)
 
-            # Process frames in the queue
-            while not frame_queue.empty():
-                try:
-                    # get the content of the frame queue (from the camera process)
-                    frame, timestamp = frame_queue.get(block=False)
-                    # do the preprocessing
-                    processed_frame = preprocess_image(frame, **self.param)
-                    # do the tracking
-                    segments, angles = center_of_mass_based_tracking(processed_frame,
-                                                                     (self.param['base_x'], self.param['base_y']),
-                                                                     (self.param['tip_x'], self.param['tip_y']),
-                                                                      self.param['n_segments'],
-                                                                      self.param['search_area'])
-                    # send tracking results to stimulus program through the named pipe
-                    self.send_angle_through_pipe(angles[-1]-angles[0], timestamp)
+            # if we receive a new timestamp, that means the raw image is updated so we do tracking
+            # this assumes that the tracking is faster than camera frames
+            while not timestamp_queue.empty():
+                timestamp = timestamp_queue.get(block=False)
+                # get the content of the frame queue (from the camera process)
+                frame = decode_array_to_frame(self.shared_arrays['current_raw_frame'])
+                # do the preprocessing
+                processed_frame = preprocess_image(frame, **self.param)
+                # do the tracking
+                segments, angles = center_of_mass_based_tracking(processed_frame,
+                                                                 (self.param['base_x'], self.param['base_y']),
+                                                                 (self.param['tip_x'], self.param['tip_y']),
+                                                                  self.param['n_segments'],
+                                                                  self.param['search_area'])
+                # send tracking results to stimulus program through the named pipe
+                self.send_angle_through_pipe(angles[-1]-angles[0], timestamp)
 
-                    # write results into the shared memory array so the main process can see it
-                    if self.param['show_raw']:
-                        self.encode_frame_to_array(frame)
-                    else:
-                        self.encode_frame_to_array(processed_frame)
-                    self.shared_arrays['current_segment'][:, :self.param['n_segments']+1] = segments[:]
-                    self.shared_arrays['angle_history'][self.ii] = angles[-1] - angles[0]
+                # write results into the shared memory array so the main process can see it
+                # note that this function mutate the content of the input array
+                encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
+                self.shared_arrays['current_segment'][:, :self.param['n_segments']+1] = segments[:]
+                self.shared_arrays['angle_history'][0, self.ii] = angles[-1] - angles[0]
+                self.shared_arrays['angle_history'][1, self.ii] = timestamp
 
-                    self.ii = (self.ii + 1) % self.param['angle_trace_length']
-
-                except Empty:
-                    continue
+                self.ii = (self.ii + 1) % self.param['angle_trace_length']
 
         print('Exited tracking while loop')
         [self.shared_memories[x].close() for x in self.shared_memories.keys()]
@@ -95,27 +92,20 @@ class TrackerObject():
         """
 
         self.shared_memories = dict(
-            frame_memory   = shared_memory.SharedMemory(name='frame_memory'),
+            raw_frame_memory       = shared_memory.SharedMemory(name='raw_frame_memory'),
+            processed_frame_memory = shared_memory.SharedMemory(name='processed_frame_memory'),
             segment_memory = shared_memory.SharedMemory(name='segment_memory'),
             angle_memory   = shared_memory.SharedMemory(name='angle_memory')
         )
 
+        # The sizes of ndarrays are hard-coded without referencing the memory size, because memory size cannot be
+        # an arbitrary number and can be different from what we specified in the parent process
         self.shared_arrays = dict(
-            current_frame   = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['frame_memory'].buf),
+            current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
+            current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
             current_segment = np.ndarray((2, 10), dtype=np.float64, buffer=self.shared_memories['segment_memory'].buf),
-            angle_history   = np.ndarray((self.param['angle_trace_length'],), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
+            angle_history   = np.ndarray((2, self.param['angle_trace_length']), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
         )
-
-    def encode_frame_to_array(self, img):
-        """
-        Flatten the raw or preprocessed image and put them into the shared memory-based 1d array
-        Also pass the desired image size at the end of this array
-        """
-        self.shared_arrays['current_frame'][:img.size] = img.ravel()
-        self.shared_arrays['current_frame'][-4] = img.shape[0]//255
-        self.shared_arrays['current_frame'][-3] = img.shape[0]%255
-        self.shared_arrays['current_frame'][-2] = img.shape[1]//255
-        self.shared_arrays['current_frame'][-1] = img.shape[1]%255
 
     def send_angle_through_pipe(self, tail_angle, timestamp):
         """

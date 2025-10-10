@@ -103,6 +103,29 @@ def preprocess_image(img, image_scale=1, filter_size=3, color_invert=False, clip
 
     return img
 
+def encode_frame_to_array(img, arr):
+    """
+    Given an image and 1d array, ravel image and put it in the array
+    Expect array to be based off of shared memory
+    This mutates the content of arr
+    """
+    arr[:img.size] = img.ravel()
+    arr[-4] = img.shape[0] // 255
+    arr[-3] = img.shape[0] % 255
+    arr[-2] = img.shape[1] // 255
+    arr[-1] = img.shape[1] % 255
+    return arr
+
+def decode_array_to_frame(arr):
+    """
+    Given a 1D-array of uint8 created with the above encode_frame_to_array function,
+    reconstitute an image
+    """
+    frame_shape = (int(arr[-4]) * 255 + int(arr[-3]),
+                   int(arr[-2]) * 255 + int(arr[-1]))
+    return arr[:frame_shape[0] * frame_shape[1]].reshape(frame_shape)
+
+
 class TypeForcedEdit(QLineEdit):
     """
     Type-checking numeric entries in upper layers is stupid so we subclass LineEdit

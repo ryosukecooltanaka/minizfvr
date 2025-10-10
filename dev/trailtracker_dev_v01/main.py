@@ -32,6 +32,7 @@ from PyQt5.QtWidgets import (
     QLabel
 )
 
+from utils import decode_array_to_frame
 from camera import SelectCameraByName
 from panels import CameraPanel, AnglePanel, ControlPanel
 from tracker import TrackerObject
@@ -71,25 +72,29 @@ class MiniZFTT(QMainWindow):
         # Create a tracking object
         self.tracker = TrackerObject(self.parameters.__dict__)
 
-        ## Prepare shared_memory for the GUI visualization of the data (camera image, current segment position, angle history)
-        # This is faster than Queue, that requires pickling etc. which can be slow. Because the main GUI only needs
+        ## Prepare shared_memory (camera image, current segment position, angle history)
+        # This is faster than Queue, which requires pickling etc.  Because the main GUI only needs
         # a fraction of data, throwing every data into a queue is wasteful in terms of CPU
         # Because the camera initialization does not happen until the child process is kick-started, we don't know the exact
-        # amount of memory we need here. I guess 1000 x 1000 px uint8 should be fine?
-        self.frame_memory = shared_memory.SharedMemory(create=True, name='frame_memory', size=1000000)
+        # amount of memory we need here. I guess 1000 x 1000 px uint8 (1MB) should be fine?
+        self.raw_frame_memory = shared_memory.SharedMemory(create=True, name='raw_frame_memory', size=1000000)
+        self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
         # max 10 segments x {x, y} x float64 (8 bytes) = 160 bytes
         self.segment_memory = shared_memory.SharedMemory(create=True, name='segment_memory', size=160)
         # angle trace visualization - length is decided by angle_trace_length parameter (x 8 byte per data point)
-        self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=8*self.parameters.angle_trace_length)
+        # we also store timestamps into the same array (= 2x the buffer size)
+        self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=16*self.parameters.angle_trace_length)
 
         ## create numpy arrays that refers to the memory we allocated
         # because the size of the image can change dynamically, we keep this as 1d array and reshape when we show them
-        self.current_frame = np.ndarray((self.frame_memory.size,), dtype=np.uint8, buffer=self.frame_memory.buf)
+        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
+        self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.current_segments = np.ndarray((2, 10), dtype=np.float64, buffer=self.segment_memory.buf)
-        self.angle_history = np.ndarray((self.parameters.angle_trace_length,), dtype=np.float64, buffer=self.angle_memory.buf)
+        self.angle_history = np.ndarray((2, self.parameters.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
+        self.angle_history[:] = 0 # initialize
 
-        # Create Queues, used by child process to talk to each other
-        self.frame_queue = mp.Queue(maxsize=500) # this will store tuples of (frame, timestamp)
+        # Create Queues
+        self.timestamp_queue = mp.Queue(maxsize=10) # pass timestamps
         self.param_queue = mp.Queue(maxsize=10) # passing parameters to the tracking process
         # send the initial parameter, because the tracking process needs a parameter for initialization
         self.param_queue.put(self.parameters.__dict__)
@@ -99,8 +104,9 @@ class MiniZFTT(QMainWindow):
         # The camera object will be Pickled to be copied, and there are certain things that cannot be pickled.
         # For this reason, we call the camera initialization in the child process, at the beginning of the
         # continuous acquisition process.
-        self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.frame_queue,))
-        self.tracking_process = mp.Process(target=self.tracker.continuously_track_tail, args=(self.frame_queue, self.param_queue, ))
+        self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.timestamp_queue,), name='acquisition process')
+        self.tracking_process = mp.Process(target=self.tracker.continuously_track_tail, args=(self.timestamp_queue, self.param_queue,), name='tracking process')
+
         # Daemons are auto-killed by parents (= safer with accidents) but can't spawn child processes themselves (which is fine)
         self.acquisition_process.daemon = True
         self.tracking_process.daemon = True
@@ -162,7 +168,6 @@ class MiniZFTT(QMainWindow):
     Methods called continuously during the run
     """
 
-
     def update_data_panels(self):
         """
         Update Camera and Angle Panels
@@ -170,10 +175,15 @@ class MiniZFTT(QMainWindow):
         """
 
         # reconstitute frame from the shared 1d array (casting because the array is uint8)
-        frame_shape = (int(self.current_frame[-4])*255+int(self.current_frame[-3]),
-                       int(self.current_frame[-2])*255+int(self.current_frame[-1]))
-        if frame_shape[0]>0:
-            self.camera_panel.set_image(self.current_frame[:frame_shape[0] * frame_shape[1]].reshape(frame_shape))
+        if self.parameters.show_raw:
+            frame_array = self.current_raw_frame
+        else:
+            frame_array = self.current_processed_frame
+
+        # if the frame_array is empty (in which case we do not have the size encoded at the end)
+        # skip the image update
+        if (frame_array[-1]>0) or (frame_array[-2]>0):
+            self.camera_panel.set_image(decode_array_to_frame(frame_array))
 
         # Adjust factor for tracked tail visualization
         if self.parameters.show_raw:
@@ -185,7 +195,14 @@ class MiniZFTT(QMainWindow):
         self.camera_panel.update_tracked_tail(self.current_segments[:, :self.parameters.n_segments+1], factor=factor)
 
         # angle panel update
-        self.angle_panel.set_data(np.arange(self.parameters.angle_trace_length,0,-1), self.angle_history) # somehow make this smarter
+        sort_ind = np.argsort(self.angle_history[1, :])
+        self.angle_panel.set_data(self.angle_history[1,sort_ind]-np.max(self.angle_history[1,:]),
+                                  self.angle_history[0, sort_ind]) # todo somehow make this smarter
+
+        # show frame rate
+        if any(self.angle_history[1, :]>0):
+            valid_timestamps = self.angle_history[1, :][self.angle_history[1, :]>0]
+            self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(1 / np.median(np.diff(valid_timestamps))))
 
     def update_parameters(self):
         """
@@ -229,7 +246,6 @@ class MiniZFTT(QMainWindow):
         # Send parameter to the child process running the tracker through the queue
         self.param_queue.put(self.parameters.__dict__)
 
-
     """
     Methods called once at the end
     """
@@ -247,12 +263,12 @@ class MiniZFTT(QMainWindow):
         self.gui_timer.stop()
 
         # close and unlink shared memories
-        self.frame_memory.close()
-        self.segment_memory.close()
-        self.angle_memory.close()
-        self.frame_memory.unlink()
-        self.segment_memory.unlink()
-        self.angle_memory.unlink()
+        for attr in dir(self):
+            if type(getattr(self, attr)) == shared_memory.SharedMemory:
+                print('closing shared memory',attr)
+                getattr(self, attr).close()
+                getattr(self, attr).unlink()
+
 
 
 """

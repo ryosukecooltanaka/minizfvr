@@ -8,6 +8,8 @@ import PySpin
 import cv2
 import time
 import multiprocessing as mp
+from multiprocessing import shared_memory
+from utils import encode_frame_to_array
 
 class Camera():
     """
@@ -25,7 +27,6 @@ class Camera():
         """
         self.camera = None
         self.exit_acquisition_event = mp.Event() # this is a flag used to exit while loop, shared across processes
-        self.ii = 0
 
     def initialize(self, **kwargs):
         """
@@ -44,19 +45,23 @@ class Camera():
     def close(self):
         pass
 
-    def continuously_acquire_frames(self, shared_array):
+    def continuously_acquire_frames(self, timestamp_queue):
         """
         Fetch frames as fast as possible, and put acquired frames into the numpy array based off of shared memory
         """
         self.initialize()
+        # connect to shared memory
+        raw_frame_memory = shared_memory.SharedMemory(name='raw_frame_memory')
+        frame_array = np.ndarray((1000000,), dtype=np.uint8, buffer=raw_frame_memory.buf)
+
         while not self.exit_acquisition_event.is_set():
             fetch_success, frame, timestamp = self.fetch_image()
             if fetch_success:
-                queue.put((frame, timestamp))
-                self.ii += 1
-                if self.ii % 100 == 0:
-                    print('Read frame',self.ii)
+                encode_frame_to_array(frame, frame_array)
+                timestamp_queue.put(timestamp)
+
         print('Exited continuous acquisition')
+        raw_frame_memory.close()
         self.close()
 
 
@@ -111,6 +116,7 @@ class DummyCamera(Camera):
         self.video = cv2.VideoCapture(self.video_path)
 
     def fetch_image(self):
+
         if self.frame_counter == self.video.get(cv2.CAP_PROP_FRAME_COUNT):
             self.video.set(cv2.CAP_PROP_POS_FRAMES,0)
             self.frame_counter = 0
