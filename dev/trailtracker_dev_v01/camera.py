@@ -11,6 +11,8 @@ import multiprocessing as mp
 from multiprocessing import shared_memory
 from utils import encode_frame_to_array
 
+# todo: implement some basic camera controls, especially exposure
+
 class Camera():
     """
     Camera object archetype
@@ -139,7 +141,6 @@ def SelectCameraByName(camera_name, **kwargs):
     Main GUI program calls this function to get the camera object.
     The camera_name should be somehow specified in a config file etc.
     """
-    event = mp.Event()
     if camera_name=='pointgrey':
         camera = PointGreyCamera()
     elif camera_name=='dummy':

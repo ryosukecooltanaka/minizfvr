@@ -1,9 +1,6 @@
 import numpy as np
-import sys
 import multiprocessing as mp
 from multiprocessing import shared_memory
-from queue import Empty
-import time
 
 from utils import preprocess_image, center_of_mass_based_tracking, encode_frame_to_array, decode_array_to_frame
 

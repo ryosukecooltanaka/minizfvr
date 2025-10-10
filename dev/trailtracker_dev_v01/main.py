@@ -72,42 +72,46 @@ class MiniZFTT(QMainWindow):
         # Create a tracking object
         self.tracker = TrackerObject(self.parameters.__dict__)
 
-        ## Prepare shared_memory (camera image, current segment position, angle history)
-        # This is faster than Queue, which requires pickling etc.  Because the main GUI only needs
-        # a fraction of data, throwing every data into a queue is wasteful in terms of CPU
-        # Because the camera initialization does not happen until the child process is kick-started, we don't know the exact
-        # amount of memory we need here. I guess 1000 x 1000 px uint8 (1MB) should be fine?
+        ## Prepare shared_memory so processes can pass around data
+        # This is faster and less CPU-intensive than Queue, which require each process to pickle/unpickle data which
+        # becomes more time-consuming as the data gets bigger.
+        # Memory for raw and processed image data. Because we do not know the camera frame size until we kick-start
+        # the camera process, we just reserve 1MB each for these
         self.raw_frame_memory = shared_memory.SharedMemory(create=True, name='raw_frame_memory', size=1000000)
         self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
-        # max 10 segments x {x, y} x float64 (8 bytes) = 160 bytes
+        # Memory for storing the latest tracked segment positions for the sake of visualization.
+        # Max 10 segments x {x, y} x float64 (8 bytes) = 160 bytes
         self.segment_memory = shared_memory.SharedMemory(create=True, name='segment_memory', size=160)
-        # angle trace visualization - length is decided by angle_trace_length parameter (x 8 byte per data point)
-        # we also store timestamps into the same array (= 2x the buffer size)
+        # Memory for the history of the tail angle and associated time stamps.
+        # length is decided by angle_trace_length parameter (x 8byte float x 2)
         self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=16*self.parameters.angle_trace_length)
 
-        ## create numpy arrays that refers to the memory we allocated
-        # because the size of the image can change dynamically, we keep this as 1d array and reshape when we show them
-        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
+        ## create numpy arrays that refers to the shared memory we allocated
+        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf) # these are intentionally 1d, because the frame shapes can change dynamically
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.current_segments = np.ndarray((2, 10), dtype=np.float64, buffer=self.segment_memory.buf)
         self.angle_history = np.ndarray((2, self.parameters.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
         self.angle_history[:] = 0 # initialize
 
-        # Create Queues
+        ## Create Queues
+        # We still use queues for timestamps and parameters. Everytime the tracking process receives a new timestamp
+        # from the camera process through the queue, it redoes the tracking. Without this queue, the tracking process
+        # wouldn't know if the shared frame memory was updated or not.
         self.timestamp_queue = mp.Queue(maxsize=10) # pass timestamps
         self.param_queue = mp.Queue(maxsize=10) # passing parameters to the tracking process
         # send the initial parameter, because the tracking process needs a parameter for initialization
         self.param_queue.put(self.parameters.__dict__)
 
-        # Delegate frame acquisition to a child process
-        # By calling mp.Process, we create a child process and send a copy of the self.camera there.
-        # The camera object will be Pickled to be copied, and there are certain things that cannot be pickled.
-        # For this reason, we call the camera initialization in the child process, at the beginning of the
-        # continuous acquisition process.
+        ## Delegate frame acquisition to a child process
+        # By calling mp.Process, we create a child process and send a copy of the camera/tracking objects there.
+        # These objects will be Pickled to be copied, and there are certain things that cannot be pickled (e.g.,
+        # things with non-python backend, file handles etc.). or this reason, we call the camera initialization
+        # in the child process, at the beginning of the continuous acquisition process (rather than in the constructor).
         self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.timestamp_queue,), name='acquisition process')
         self.tracking_process = mp.Process(target=self.tracker.continuously_track_tail, args=(self.timestamp_queue, self.param_queue,), name='tracking process')
 
-        # Daemons are auto-killed by parents (= safer with accidents) but can't spawn child processes themselves (which is fine)
+        # Set child processes to be Daemons. If you don't do this, when the main process crashes, the child processes
+        # does not shut down like zombies
         self.acquisition_process.daemon = True
         self.tracking_process.daemon = True
 
@@ -119,6 +123,7 @@ class MiniZFTT(QMainWindow):
         self.gui_timer.setInterval(50)  # millisecond
         self.gui_timer.timeout.connect(self.update_data_panels)  # define callback
 
+        # kick-start child processes and the GUI timer
         self.acquisition_process.start()
         self.tracking_process.start()
         self.gui_timer.start()
@@ -174,7 +179,8 @@ class MiniZFTT(QMainWindow):
         This method should be called at like 20 Hz tops
         """
 
-        # reconstitute frame from the shared 1d array (casting because the array is uint8)
+        ## Reconstitute frame from the shared 1d array (casting because the array is uint8)
+        # this is not synchronized (i.e., we will show whatever is the latest)
         if self.parameters.show_raw:
             frame_array = self.current_raw_frame
         else:
@@ -185,21 +191,22 @@ class MiniZFTT(QMainWindow):
         if (frame_array[-1]>0) or (frame_array[-2]>0):
             self.camera_panel.set_image(decode_array_to_frame(frame_array))
 
-        # Adjust factor for tracked tail visualization
+        # Tracked tail segment positions are in the coordinate of the processed (potentially resized) images.
+        # If we are showing the raw frame, we need to account for the resizing factor.
         if self.parameters.show_raw:
             factor = 1.0 / self.parameters.image_scale
         else:
             factor = 1.0
 
-        # camera panel tracked tail line update
+        # Camera panel tracked tail line update
         self.camera_panel.update_tracked_tail(self.current_segments[:, :self.parameters.n_segments+1], factor=factor)
 
-        # angle panel update
+        # Angle panel update
         sort_ind = np.argsort(self.angle_history[1, :])
         self.angle_panel.set_data(self.angle_history[1,sort_ind]-np.max(self.angle_history[1,:]),
-                                  self.angle_history[0, sort_ind]) # todo somehow make this smarter
+                                  self.angle_history[0, sort_ind])
 
-        # show frame rate
+        # Indicate frame rate
         if any(self.angle_history[1, :]>0):
             valid_timestamps = self.angle_history[1, :][self.angle_history[1, :]>0]
             self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(1 / np.median(np.diff(valid_timestamps))))
@@ -215,6 +222,9 @@ class MiniZFTT(QMainWindow):
         new_sr, new_inv, new_iscale, new_fsize, new_cthresh = self.control_panel.return_current_value()
 
         # Before overwriting the old parameters, check if we need to adjust the tail ROI and do so
+        # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
+        # (potentially resized) images, we need to adjust their scales every time we switch between showing raw vs.
+        # processed images or changing the resizing factor.
         if new_sr and not self.parameters.show_raw: # if we switched from processed to raw
             self.camera_panel.rescale_tail_standard(1 / self.parameters.image_scale)
         if not new_sr and self.parameters.show_raw: # if we switched from raw to processed
@@ -229,7 +239,7 @@ class MiniZFTT(QMainWindow):
         self.parameters.filter_size = int(new_fsize) # I think sliders return float?
         self.parameters.clip_threshold = int(new_cthresh)
 
-        # also log tail standard position into parameter object, so we can easily pass them to the tracking process
+        # Also log tail standard position into parameter object, so we can easily pass them to the tracking process
         factor = 1.0
         if self.parameters.show_raw:
             factor = self.parameters.image_scale

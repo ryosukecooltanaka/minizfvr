@@ -1,23 +1,14 @@
 import numpy as np
 import pyqtgraph as pg
-import sys
 from parameters import TailTrackerParams
 from utils import TypeForcedEdit
 
-from PyQt5.QtCore import QSize, Qt, QTimer, QPointF
+from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtWidgets import (
     QWidget,
-    QMainWindow,
-    QPushButton,
     QCheckBox,
-    QVBoxLayout,
-    QHBoxLayout,
     QGridLayout,
-    QLineEdit,
-    QComboBox,
     QLabel,
-    QSizePolicy,
-    QInputDialog,
     QSlider
 )
 
@@ -29,7 +20,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     """
 
     def __init__(self, *args, base_x, base_y, tip_x, tip_y, **kwargs):
-        super().__init__()
+        super().__init__(*args, **kwargs)
         # This is the "GraphicsItem" that is added to the widget
         self.display_area = pg.ViewBox(invertY=True, lockAspect=True)  # this graphics item implements easy scaling
 
@@ -114,7 +105,7 @@ class ControlPanel(QWidget):
         # preprocessing parameters
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
-        self.image_scale_box = TypeForcedEdit(float)
+        self.image_scale_box = TypeForcedEdit(float) # subclassed to only allow specific numeric types
         self.filter_size_slider = QSlider(Qt.Horizontal)
         self.clip_threshold_slider = QSlider(Qt.Horizontal)
         self.arrange_widget()
@@ -164,10 +155,6 @@ class ControlPanel(QWidget):
         self.clip_threshold_slider.setValue(p.clip_threshold)
 
     def return_current_value(self):
-        """
-        Does what it does + type check on the LineEdit inputs
-        """
-
         return self.show_raw_checkbox.isChecked(),\
                self.color_invert_checkbox.isChecked(),\
                self.image_scale_box.value(),\
