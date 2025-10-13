@@ -201,14 +201,15 @@ class MiniZFTT(QMainWindow):
         # Camera panel tracked tail line update
         self.camera_panel.update_tracked_tail(self.current_segments[:, :self.parameters.n_segments+1], factor=factor)
 
-        # Angle panel update
-        sort_ind = np.argsort(self.angle_history[1, :])
-        self.angle_panel.set_data(self.angle_history[1,sort_ind]-np.max(self.angle_history[1,:]),
-                                  self.angle_history[0, sort_ind])
+        if any(self.angle_history[1, :] > 0):
 
-        # Indicate frame rate
-        if any(self.angle_history[1, :]>0):
-            valid_timestamps = self.angle_history[1, :][self.angle_history[1, :]>0]
+            # Angle panel update
+            sort_ind = np.argsort(-self.angle_history[1, :])[self.angle_history[1, :]>0]
+            self.angle_panel.set_data(self.angle_history[1,:][sort_ind]-np.max(self.angle_history[1,:]),
+                                      self.angle_history[0,:][sort_ind])
+
+            # Indicate frame rate
+            valid_timestamps = self.angle_history[1, :][self.angle_history[1, :] > 0]
             self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(1 / np.median(np.diff(valid_timestamps))))
 
     def update_parameters(self):

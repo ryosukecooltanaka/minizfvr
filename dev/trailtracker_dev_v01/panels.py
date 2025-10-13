@@ -20,7 +20,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     """
 
     def __init__(self, *args, base_x, base_y, tip_x, tip_y, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         # This is the "GraphicsItem" that is added to the widget
         self.display_area = pg.ViewBox(invertY=True, lockAspect=True)  # this graphics item implements easy scaling
 
@@ -79,7 +79,7 @@ class AnglePanel(pg.GraphicsLayoutWidget):
     """
 
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        super().__init__()
         # Prepare tail angle plot item & data
         self.angle_plot = pg.PlotItem()
         self.angle_plot_data = pg.PlotDataItem()
