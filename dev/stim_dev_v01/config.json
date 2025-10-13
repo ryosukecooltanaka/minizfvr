@@ -1,0 +1,17 @@
+{
+    "is_panorama": false,
+    "x": 100,
+    "y": 100,
+    "w": 300,
+    "h": 100,
+    "pw": 300,
+    "ph": 300,
+    "ppad": 30,
+    "physical_x": 10.0,
+    "px_per_mm": 30.0,
+    "save_path": "./",
+    "animal_id": 0,
+    "animal_genotype": "WT",
+    "animal_age": 7,
+    "animal_comment": ""
+}

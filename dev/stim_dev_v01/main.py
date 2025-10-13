@@ -46,15 +46,18 @@ from PyQt5.QtWidgets import (
     QLabel
 )
 
+from parameters import StimulusAppParams
+from panels import StimulusControlPanel
+
 class StimulusApp:
     """
     In each script specifying the experiment, we import this app object
     Not sure if this is the most straightforward way of doing it, but should work
     """
-    def __init__(self):
+    def __init__(self, is_panorama=False):
         app = QApplication([])
         # Instantiate the main GUI window
-        win = StimulusControlWindow()
+        win = StimulusControlWindow(is_panorama)
         # show the window
         win.show()
         # start the application (exit the interpreter once the app closes)
@@ -74,10 +77,7 @@ class StimulusControlWindow(QMainWindow):
     - parameters -- probably no need to dynamically update this?
     """
 
-    """
-    Constructor & Things that are run only once at the beginning
-    """
-    def __init__(self):
+    def __init__(self, is_panorama):
         """
         The main window constructor. Called once at the beginning.
         """
@@ -85,23 +85,33 @@ class StimulusControlWindow(QMainWindow):
         # Call the parental (QMainWindow) constructor
         super().__init__()
         self.setWindowTitle('Stimulus Control')
-        self.setGeometry(100, 100, 400, 200)
+        self.setGeometry(100, 100, 200, 400)
+
+        # Create a parameter object & load config
+        self.parameters = StimulusAppParams()
+        self.parameters.load_config_from_json()
+        self.parameters.is_panorama = is_panorama
 
         # create a stimulus window
-        self.stimulus_window = StimulusWindow()
+        self.stimulus_window = StimulusWindow(self.parameters) # pass reference to parameters
         self.stimulus_window.show()
 
-        self.timer = QTimer()
-        self.timer.setInterval(1000)
-        self.timer.timeout.connect(self.stimulus_window.repaint)
-        self.timer.start()
+        # prepare UI panels
+        self.ui = StimulusControlPanel(self.parameters) # pass reference to parameters
+        self.setCentralWidget(self.ui)
+
+
+
+
+    def closeEvent(self, event):
+        self.parameters.save_config_into_json()
 
 
 class StimulusWindow(QWidget):
     """
     The second window on which we present stimuli to be viewed by the animals
     """
-    def __init__(self):
+    def __init__(self, param):
         super().__init__()
         self.setWindowTitle('Stimulus Window')
         self.setGeometry(500, 500, 500, 500)
@@ -111,6 +121,10 @@ class StimulusWindow(QWidget):
         # https://www.pythonguis.com/tutorials/custom-title-bar-pyqt6/
         # self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
 
+        # prepare attributes to store painting area rects
+        self.rect = None # for single window
+        self.prect = None # for panorama
+        self.param = param # reference to parent parameters (= it is synchronized -- we are not copying anything)
 
     def paintEvent(self, event):
         """
@@ -120,8 +134,14 @@ class StimulusWindow(QWidget):
         """
         qp = QPainter()
         qp.begin(self)
+
+        # todo: delegate actual painting to separate methods
+        # the paint method should receive image bitmap to be shown
+        # the paint method should read rect information from the parent and use it to scale things
+        # also there should be a choice of doing 1 window vs 3 window
+
         qp.setBrush(QColor(*np.random.randint(0,255,3).astype(int)))
-        qp.drawRect(QRect(np.random.randint(0, 300), np.random.randint(0, 300), 50, 50))
+        qp.drawRect(QRect(self.param.x, self.param.y, self.param.w, self.param.h))
         qp.end()
 
 
