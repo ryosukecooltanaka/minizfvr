@@ -1,37 +1,3 @@
-"""
-Stimulus presentation app
-
-Ideas:
-
-minimum control window  +
-secondary stimulus window
-
-listen to the tracker through a named pipe
-
-calibration
-
-Timed stimulus update using the timer (or while loop in multiprocessing -- if we want to optimize for regular frame rate?)
-
-Hold a moderngl context object
-
-Options to
-- create a single "floor" object
-- create a panoramic cylinder (or a sphere)
-- full 3d world
-
-Render options
-- panoramic windows
-- single window (for bottom projection)
-
-In the end everything is rendered as a bitmap
-(is this somehow slower, if we are for example just doing gratings etc.? Not sure)
-
-Update function can update the world itself, or just texture
-
-Do we want protocol > stimulus kind of hierachy?
-
-
-"""
 import numpy as np
 import sys
 import time
@@ -46,18 +12,21 @@ from PyQt5.QtWidgets import (
     QLabel
 )
 
+from qimage2ndarray import array2qimage
 from parameters import StimParamObject
 from panels import StimulusControlPanel
 
 class StimulusApp:
     """
-    In each script specifying the experiment, we import this app object
-    Not sure if this is the most straightforward way of doing it, but should work
+    In each script specifying the experiment, we import this app object, and hand a stimulus generator object
+    The constructor of this object will kickstart the GUI
     """
-    def __init__(self, is_panorama=False):
+    def __init__(self, stimulus_generator, is_panorama=False):
         app = QApplication([])
         # Instantiate the main GUI window
-        win = StimulusControlWindow(is_panorama)
+        # You need to pass a stimulus generator object, which should have an update method that returns bitmap
+        # to be painted.
+        win = StimulusControlWindow(stimulus_generator, is_panorama)
         # show the window
         win.show()
         # start the application (exit the interpreter once the app closes)
@@ -77,7 +46,7 @@ class StimulusControlWindow(QMainWindow):
     - parameters -- probably no need to dynamically update this?
     """
 
-    def __init__(self, is_panorama):
+    def __init__(self, stimulus_generator, is_panorama):
         """
         The main window constructor. Called once at the beginning.
         """
@@ -86,6 +55,11 @@ class StimulusControlWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle('Stimulus Control')
         self.setGeometry(100, 100, 200, 400)
+
+        # Stimulus generator object
+        # This should have a 'update' method, which takes timestamp, tail info, calibration parameters as inputs
+        # and return bitmap (ndarray) as an output. Otherwise it can be anything
+        self.stimulus_generator = stimulus_generator
 
         # Create a parameter object & load config
         self.parameters = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
@@ -103,6 +77,45 @@ class StimulusControlWindow(QMainWindow):
         self.ui = StimulusControlPanel(self.parameters) # pass reference to parameters
         self.setCentralWidget(self.ui)
 
+        # define ui callback
+        self.ui.start_button.clicked.connect(self.toggle_run_state)
+        self.ui.reset_button.clicked.connect(self.reset_stimulus)
+
+        # stimulus update timer
+        self.timer = QTimer()
+        self.timer.setInterval(1000 // 60) # aim 60 Hz
+        self.timer.timeout.connect(self.stimulus_update)
+
+        # flags and timestamps
+        self.stimulus_running = False
+        self.t0 = 0
+
+    def toggle_run_state(self):
+        if not self.stimulus_running:
+            self.stimulus_running = True
+            self.timer.start()
+            self.t0 = time.time()
+            self.ui.start_button.setText('Stop')
+        else:
+            self.stimulus_running = False
+            self.timer.stop()
+            self.ui.start_button.setText('Start')
+
+    def reset_stimulus(self):
+        self.stimulus_window.show()
+
+    def stimulus_update(self):
+        """
+        Called every timer update
+        """
+        # get current time stamp
+        t = time.time() - self.t0
+
+        # give the time stamp to the stimulus generator object, get the frame bitmap
+        stim_frame = self.stimulus_generator.update(t)
+
+        # pass the frame bitmap to the StimulusWindow, and paint
+        self.stimulus_window.receive_and_paint_new_frame(stim_frame)
 
     def closeEvent(self, event):
         self.stimulus_window.close()
@@ -128,6 +141,9 @@ class StimulusWindow(QWidget):
         self.prect = None # for panorama
         self.param = param # reference to parent parameters (= it is synchronized -- we are not copying anything)
 
+        # ndarray of stimulus
+        self.frame = None
+
     def paintEvent(self, event):
         """
         This is what is called if there is any need for repaint - paint event is emitted when the window is resized
@@ -137,15 +153,22 @@ class StimulusWindow(QWidget):
         qp = QPainter()
         qp.begin(self)
 
-        # todo: delegate actual painting to separate methods
+        # todo: delegate actual painting to separate methods?
         # the paint method should receive image bitmap to be shown
         # the paint method should read rect information from the parent and use it to scale things
         # also there should be a choice of doing 1 window vs 3 window
 
-        qp.setBrush(QColor(*np.random.randint(0,255,3).astype(int)))
-        qp.drawRect(QRect(self.param.x, self.param.y, self.param.w, self.param.h))
+        if self.frame is not None:
+            qp.setBrush(QColor(*np.random.randint(0,255,3).astype(int)))
+            qp.drawImage(QRect(self.param.x, self.param.y, self.param.w, self.param.h),
+                         array2qimage(self.frame))
         qp.end()
 
+    def receive_and_paint_new_frame(self, frame):
+        """
+        This is called from upstream every time new stimulus frame is generated
+        Receives a frame bitmap and paint it
+        """
+        self.frame = frame
+        self.repaint()
 
-if __name__ == "__main__":
-    StimulusApp()

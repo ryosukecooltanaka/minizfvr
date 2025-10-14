@@ -14,16 +14,17 @@ class BaseParams:
     """
     Implement methods to read/write parameters from json
     """
-    def load_config_from_json(self, config_path = './config.json'):
+    def load_config_from_json(self, config_path = './config.json', verbose=False):
         if os.path.isfile(config_path):
-            print('Loading parameters from from ', config_path)
+            print('Loading parameters from ', config_path)
             with open(config_path, 'r') as f:
                 config_dict = json.load(f)
-                self.read_param_from_dict(config_dict, verbose=True)
+                self.read_param_from_dict(config_dict, verbose=verbose)
 
     def save_config_into_json(self, config_path = './config.json'):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(self.__dict__, f, ensure_ascii=False, indent=4)
+        print('Saved parameters to ', config_path)
 
     def read_param_from_dict(self, param_dict, verbose=False):
         for key in param_dict.keys():
@@ -52,7 +53,7 @@ class StimulusAppParams(BaseParams):
     ppad: int = 30 # inner padding to prevent shadowing due to the mirror geometry
 
     # calibration parameter, for when you want to specify stimulus in terms of mm
-    physical_x: float = 10.0
+    physical_w: float = 10.0
     px_per_mm: float = 1.0
 
     # saving related

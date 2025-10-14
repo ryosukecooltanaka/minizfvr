@@ -47,7 +47,7 @@ class StimulusControlPanel(QWidget):
         self.setLayout(layout)
 
         # prepare sub-panels (windows). Also pass the reference to the parameter object
-        # Because they are supposed to be free-floating, there is not parent
+        # Because they are supposed to be free-floating, there is no parent
         self.calibration_panel = CalibrationPanel(None, param=param)
         self.metadata_panel = MetadataPanel(None, param=param)
 
@@ -56,8 +56,11 @@ class StimulusControlPanel(QWidget):
         self.metadata_button.clicked.connect(self.metadata_panel.show)
 
         # Parameter change triggers GUI refresh (for both subpanels)
-        self.param.paramChanged.connect(self.calibration_panel.refresh_gui)
-        self.param.paramChanged.connect(self.metadata_panel.refresh_gui)
+        self.param.paramChanged.connect(self.refresh_gui)
+
+    def refresh_gui(self):
+        self.calibration_panel.refresh_gui()
+        self.metadata_panel.refresh_gui()
 
     def closeEvent(self, event):
         """
@@ -87,7 +90,7 @@ class CalibrationPanel(QWidget):
         self.w_box = TypeForcedEdit(int, 5)
         self.h_box = TypeForcedEdit(int, 5)
         self.pad_box = TypeForcedEdit(int, 5)
-        self.physical_x_box = TypeForcedEdit(float)
+        self.physical_w_box = TypeForcedEdit(int)
         boxes = (self.x_box, self.y_box, self.w_box, self.h_box)
         box_names = ('x (px)', 'y (px)', 'width (px)', 'height (px)')
 
@@ -98,16 +101,15 @@ class CalibrationPanel(QWidget):
             layout.addWidget(box, i, 1)
             box.editingFinished.connect(self.refresh_param)
 
-
         # In panorama mode, we need padding, otherwise we need a box for physical dimension
         if self.param.is_panorama:
             layout.addWidget(QLabel('padding (px)'), 4, 0)
             layout.addWidget(self.pad_box, 4, 1)
             self.pad_box.editingFinished.connect(self.refresh_param)
         else:
-            layout.addWidget(QLabel('physical x (mm)'), 4, 0)
-            layout.addWidget(self.physical_x_box, 4, 1)
-            self.physical_x_box.editingFinished.connect(self.refresh_param)
+            layout.addWidget(QLabel('physical w (mm)'), 4, 0)
+            layout.addWidget(self.physical_w_box, 4, 1)
+            self.physical_w_box.editingFinished.connect(self.refresh_param)
 
         self.setLayout(layout)
 
@@ -123,7 +125,7 @@ class CalibrationPanel(QWidget):
         if not self.param.is_panorama:
             self.w_box.setValue(self.param.w)
             self.h_box.setValue(self.param.h)
-            self.physical_x_box.setValue(self.param.physical_x)
+            self.physical_w_box.setValue(self.param.physical_w)
         else:
             self.w_box.setValue(self.param.pw)
             self.h_box.setValue(self.param.ph)
@@ -131,15 +133,19 @@ class CalibrationPanel(QWidget):
 
     def refresh_param(self):
         """
-        Put whatever is in the GUI into the param
+        Put whatever is in the GUI into the param & emit param change signal
         """
         self.param.x = self.x_box.value()
         self.param.y = self.y_box.value()
         if not self.param.is_panorama:
             self.param.w = self.w_box.value()
             self.param.h = self.h_box.value()
-            self.param.physical_x = self.physical_x_box.value()
-            self.param.px_per_mm = self.param.w / self.param.physical_x
+            # in case we recalibrated (i.e., manually entered physical_w), we update physical_w and recalculate px_per_mm
+            if self.param.physical_w != self.physical_w_box.value():
+                self.param.physical_w = self.physical_w_box.value()
+                self.param.px_per_mm = float(self.param.w) / float(self.param.physical_w)
+            else: # otherwise, we recalculate physical_w from the ratio and current value of x
+                self.param.physical_w = np.round(self.param.w / self.param.px_per_mm)
         else:
             self.param.pw = self.w_box.value()
             self.param.ph = self.h_box.value()
