@@ -2,6 +2,7 @@ from dataclasses import dataclass
 import json
 import os
 import sys
+from PyQt5.QtCore import QObject, pyqtSignal
 
 """
 Class to store parameters for the stimulus app (think names...)
@@ -62,4 +63,22 @@ class StimulusAppParams(BaseParams):
     animal_genotype: str = 'WT'
     animal_age: int = 7
     animal_comment: str = ''
+
+class StimParamObject(QObject, StimulusAppParams):
+    """
+    We combine the parameter class with QObject, so it can emit an event.
+    This helps us keep the GUI and parameter behind it in sync without messing things up.
+
+    Whenever we edit things from the GUI panel, callback functions will update the parameter.
+    Then we will make the StimParamObject emit the paramChanged signal.
+    This signal is then connected to a method that updates the GUI panel.
+
+    This is better than calling the GUI update method directly from the GUI callback in terms of modularity
+    (that is, direct calls can become too tangled as the app gets bigger)
+
+    We can also connect other methods, such as the stimulus window update, to this paramChanged signal,
+    such that parameter changes from the GUI is immediately reflected to what is painted etc.
+    """
+    paramChanged = pyqtSignal() # this is a class attribute (as opposed to instance attribute)
+
 

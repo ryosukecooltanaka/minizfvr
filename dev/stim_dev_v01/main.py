@@ -46,7 +46,7 @@ from PyQt5.QtWidgets import (
     QLabel
 )
 
-from parameters import StimulusAppParams
+from parameters import StimParamObject
 from panels import StimulusControlPanel
 
 class StimulusApp:
@@ -88,22 +88,24 @@ class StimulusControlWindow(QMainWindow):
         self.setGeometry(100, 100, 200, 400)
 
         # Create a parameter object & load config
-        self.parameters = StimulusAppParams()
+        self.parameters = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
         self.parameters.load_config_from_json()
         self.parameters.is_panorama = is_panorama
 
-        # create a stimulus window
-        self.stimulus_window = StimulusWindow(self.parameters) # pass reference to parameters
+        # create a stimulus window, pass null parent, and parameter reference
+        self.stimulus_window = StimulusWindow(None, param=self.parameters)
         self.stimulus_window.show()
+
+        # make sure the stimulus window is updated appropriately as we change parameters
+        self.parameters.paramChanged.connect(self.stimulus_window.repaint)
 
         # prepare UI panels
         self.ui = StimulusControlPanel(self.parameters) # pass reference to parameters
         self.setCentralWidget(self.ui)
 
 
-
-
     def closeEvent(self, event):
+        self.stimulus_window.close()
         self.parameters.save_config_into_json()
 
 
@@ -111,8 +113,8 @@ class StimulusWindow(QWidget):
     """
     The second window on which we present stimuli to be viewed by the animals
     """
-    def __init__(self, param):
-        super().__init__()
+    def __init__(self, *args, param, **kwargs):
+        super().__init__(*args, **kwargs)
         self.setWindowTitle('Stimulus Window')
         self.setGeometry(500, 500, 500, 500)
         self.setStyleSheet("background-color: black;")

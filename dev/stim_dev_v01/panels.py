@@ -9,6 +9,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QPushButton,
     QLineEdit,
+    QTextEdit,
     QSizePolicy
 )
 
@@ -45,14 +46,25 @@ class StimulusControlPanel(QWidget):
             layout.addWidget(button, hr)
         self.setLayout(layout)
 
-        # prepare subwindows
-        self.calibration_panel = CalibrationPanel(param)
-        self.metadata_panel = MetadataPanel(param)
+        # prepare sub-panels (windows). Also pass the reference to the parameter object
+        # Because they are supposed to be free-floating, there is not parent
+        self.calibration_panel = CalibrationPanel(None, param=param)
+        self.metadata_panel = MetadataPanel(None, param=param)
 
-        # connect callbacks (just the ones concerning UIs -- callbacks related to actually doing things are
-        # set from higher-up
-        self.calibrate_button.clicked.connect(self.calibration_panel.refresh_gui)
-        self.metadata_button.clicked.connect(self.metadata_panel.refresh_gui)
+        # Button click opens sub-panels
+        self.calibrate_button.clicked.connect(self.calibration_panel.show)
+        self.metadata_button.clicked.connect(self.metadata_panel.show)
+
+        # Parameter change triggers GUI refresh (for both subpanels)
+        self.param.paramChanged.connect(self.calibration_panel.refresh_gui)
+        self.param.paramChanged.connect(self.metadata_panel.refresh_gui)
+
+    def closeEvent(self, event):
+        """
+        Force close sub panels
+        """
+        self.calibration_panel.close()
+        self.metadata_panel.close()
 
 
 class CalibrationPanel(QWidget):
@@ -63,22 +75,23 @@ class CalibrationPanel(QWidget):
     how many pixels correspond to how many mm (only relevant for non-panorama mode)
     """
 
-    def __init__(self, param):
-        super().__init__()
+    def __init__(self, *args, param, **kwargs):
+        super().__init__(*args, **kwargs)
 
+        self.setWindowTitle('Paint Area Calibration')
         self.param = param
 
         # text boxes for typing in rect info
-        self.x_box = TypeForcedEdit(int)
-        self.y_box = TypeForcedEdit(int)
-        self.w_box = TypeForcedEdit(int)
-        self.h_box = TypeForcedEdit(int)
-        self.pad_box = TypeForcedEdit(int)
+        self.x_box = TypeForcedEdit(int, 5) # scroll with 5px unit (1px unit is too slow)
+        self.y_box = TypeForcedEdit(int, 5)
+        self.w_box = TypeForcedEdit(int, 5)
+        self.h_box = TypeForcedEdit(int, 5)
+        self.pad_box = TypeForcedEdit(int, 5)
         self.physical_x_box = TypeForcedEdit(float)
         boxes = (self.x_box, self.y_box, self.w_box, self.h_box)
         box_names = ('x (px)', 'y (px)', 'width (px)', 'height (px)')
 
-        # arrange widgets & connect callback
+        # arrange widgets & connect callback (= copy GUI content to parameter object)
         layout = QGridLayout()
         for box, box_name, i in zip(boxes, box_names, range(4)):
             layout.addWidget(QLabel(box_name), i, 0)
@@ -98,6 +111,9 @@ class CalibrationPanel(QWidget):
 
         self.setLayout(layout)
 
+        # put the initial content of the gui
+        self.refresh_gui()
+
     def refresh_gui(self):
         """
         Put whatever is in the param into the GUI
@@ -112,7 +128,6 @@ class CalibrationPanel(QWidget):
             self.w_box.setValue(self.param.pw)
             self.h_box.setValue(self.param.ph)
             self.pad_box.setValue(self.param.ppad)
-        self.show()
 
     def refresh_param(self):
         """
@@ -129,6 +144,7 @@ class CalibrationPanel(QWidget):
             self.param.pw = self.w_box.value()
             self.param.ph = self.h_box.value()
             self.param.ppad = self.pad_box.value()
+        self.param.paramChanged.emit() # emit signal -> call gui refresh
 
 class MetadataPanel(QWidget):
     """
@@ -136,9 +152,10 @@ class MetadataPanel(QWidget):
     Here you will specify the animal metadata
     """
 
-    def __init__(self, param):
-        super().__init__()
+    def __init__(self, *args, param, **kwargs):
+        super().__init__(*args, **kwargs)
 
+        self.setWindowTitle('Animal Metadata')
         self.param = param
 
         # text boxes for typing in rect info
@@ -147,12 +164,12 @@ class MetadataPanel(QWidget):
         self.genotype_box = QLineEdit()
         self.age_box = TypeForcedEdit(int)
         self.comment_box = QLineEdit()
-        self.comment_box.setMinimumHeight(100)
+        self.comment_box.setMinimumWidth(300)
 
         boxes = (self.savepath_box, self.id_box, self.genotype_box, self.age_box, self.comment_box)
         box_names = ('path', 'id', 'genotype', 'age', 'comment')
 
-        # arrange widgets
+        # arrange widgets & set callback (= copy GUI content to parameter object)
         layout = QGridLayout()
         for box, box_name, i in zip(boxes, box_names, range(5)):
             layout.addWidget(QLabel(box_name), i, 0)
@@ -161,23 +178,29 @@ class MetadataPanel(QWidget):
 
         self.setLayout(layout)
 
+        # put the initial content of the gui
+        self.refresh_gui()
+
     def refresh_gui(self):
         """
         Put whatever is in the param into the GUI
+        called upon param change
         """
         self.savepath_box.setText(self.param.save_path)
         self.id_box.setValue(self.param.animal_id)
         self.genotype_box.setText(self.param.animal_genotype)
         self.age_box.setValue(self.param.animal_age)
         self.comment_box.setText(self.param.animal_comment)
-        self.show()
 
     def refresh_param(self):
         """
-        Put whatever is in the GUI into the param
+        This is the callback of all Widget on this sub-window.
+        Put whatever is in the GUI into the param.
+        Also make the parameter object emit the signal
         """
         self.param.save_path = self.savepath_box.text()
         self.param.animal_id = self.id_box.value() # type check callback should happen before we reach here
         self.param.animal_genotype = self.genotype_box.text()
         self.param.animal_age = self.age_box.value()
         self.param.animal_comment = self.comment_box.text()
+        self.param.paramChanged.emit() # emit signal -> call gui refresh
