@@ -62,19 +62,19 @@ class StimulusControlWindow(QMainWindow):
         self.stimulus_generator = stimulus_generator
 
         # Create a parameter object & load config
-        self.parameters = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
-        self.parameters.load_config_from_json()
-        self.parameters.is_panorama = is_panorama
+        self.param = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
+        self.param.load_config_from_json()
+        self.param.is_panorama = is_panorama
 
         # create a stimulus window, pass null parent, and parameter reference
-        self.stimulus_window = StimulusWindow(None, param=self.parameters)
+        self.stimulus_window = StimulusWindow(None, param=self.param)
         self.stimulus_window.show()
 
-        # make sure the stimulus window is updated appropriately as we change parameters
-        self.parameters.paramChanged.connect(self.stimulus_window.repaint)
+        # make sure the stimulus window paint area is updated appropriately as we change parameters
+        self.param.paramChanged.connect(self.stimulus_window.repaint)
 
         # prepare UI panels
-        self.ui = StimulusControlPanel(self.parameters) # pass reference to parameters
+        self.ui = StimulusControlPanel(self.param) # pass reference to parameters
         self.setCentralWidget(self.ui)
 
         # define ui callback
@@ -114,12 +114,17 @@ class StimulusControlWindow(QMainWindow):
         # give the time stamp to the stimulus generator object, get the frame bitmap
         stim_frame = self.stimulus_generator.update(t)
 
+        # if the shape of the bitmap has changed, we call parameter refresh, in case if we need to change the rect
+        if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
+            self.param.bitmap_h, self.param.bitmap_w = stim_frame.shape[:2]
+            self.ui.calibration_panel.refresh_param()
+
         # pass the frame bitmap to the StimulusWindow, and paint
         self.stimulus_window.receive_and_paint_new_frame(stim_frame)
 
     def closeEvent(self, event):
         self.stimulus_window.close()
-        self.parameters.save_config_into_json()
+        self.param.save_config_into_json()
 
 
 class StimulusWindow(QWidget):
@@ -157,6 +162,17 @@ class StimulusWindow(QWidget):
         # the paint method should receive image bitmap to be shown
         # the paint method should read rect information from the parent and use it to scale things
         # also there should be a choice of doing 1 window vs 3 window
+
+        # todo: Fix how to handle paint scaling
+        # Right now we specify the paint area rect from GUI and stretch whatever image returned by the stimulus
+        # generator to this rect (instead of for example corresponding single image pixel to single device pixel)
+        # This makes sense especially for panorama setups, where I would stretch whatever rendered frame to fit
+        # physical screens on the spot (trusting the geometry of the setup). But if we are doing bottom projection
+        # and specifying the stimuli in mm units, this can accidentally introduce weird stretching.
+        # We could force the GUI-specified rect to retain the same ratio as the frame churned out by the stimulus
+        # generator, or alternatively we could force stimulus generator to listen to the app and generate stimuli
+        # with the same ratio as the rect.
+
 
         if self.frame is not None:
             qp.setBrush(QColor(*np.random.randint(0,255,3).astype(int)))

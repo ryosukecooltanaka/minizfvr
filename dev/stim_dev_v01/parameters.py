@@ -56,6 +56,11 @@ class StimulusAppParams(BaseParams):
     physical_w: float = 10.0
     px_per_mm: float = 1.0
 
+    # relates to scaling
+    bitmap_w: int = 0
+    bitmap_h: int = 0
+    force_equal_ratio: bool = False
+
     # saving related
     save_path: str = './'
 

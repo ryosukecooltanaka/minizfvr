@@ -91,6 +91,7 @@ class CalibrationPanel(QWidget):
         self.h_box = TypeForcedEdit(int, 5)
         self.pad_box = TypeForcedEdit(int, 5)
         self.physical_w_box = TypeForcedEdit(int)
+        self.force_ratio_check = QCheckBox()
         boxes = (self.x_box, self.y_box, self.w_box, self.h_box)
         box_names = ('x (px)', 'y (px)', 'width (px)', 'height (px)')
 
@@ -111,6 +112,12 @@ class CalibrationPanel(QWidget):
             layout.addWidget(self.physical_w_box, 4, 1)
             self.physical_w_box.editingFinished.connect(self.refresh_param)
 
+        # force ratio checkbox -- if checked, the ratio of the paint area is forced to be the same as the bitmap
+        # output of the stimulus generator.
+        layout.addWidget(QLabel('Force equal ratio'), 5, 0)
+        layout.addWidget(self.force_ratio_check, 5, 1)
+        self.force_ratio_check.stateChanged.connect(self.refresh_param)
+
         self.setLayout(layout)
 
         # put the initial content of the gui
@@ -130,6 +137,7 @@ class CalibrationPanel(QWidget):
             self.w_box.setValue(self.param.pw)
             self.h_box.setValue(self.param.ph)
             self.pad_box.setValue(self.param.ppad)
+        self.force_ratio_check.setChecked(self.param.force_equal_ratio)
 
     def refresh_param(self):
         """
@@ -137,19 +145,36 @@ class CalibrationPanel(QWidget):
         """
         self.param.x = self.x_box.value()
         self.param.y = self.y_box.value()
+        self.param.force_equal_ratio = self.force_ratio_check.isChecked()
+
         if not self.param.is_panorama:
             self.param.w = self.w_box.value()
-            self.param.h = self.h_box.value()
+
+            # in case we force the rect to be the same ratio as the bitmap, we only trust GUI w and h is dependent
+            if not self.param.force_equal_ratio:
+                self.param.h = self.h_box.value()
+            else:
+                self.param.h = int(np.round(self.w_box.value() * self.param.bitmap_h / self.param.bitmap_w))
+
             # in case we recalibrated (i.e., manually entered physical_w), we update physical_w and recalculate px_per_mm
             if self.param.physical_w != self.physical_w_box.value():
                 self.param.physical_w = self.physical_w_box.value()
                 self.param.px_per_mm = float(self.param.w) / float(self.param.physical_w)
             else: # otherwise, we recalculate physical_w from the ratio and current value of x
-                self.param.physical_w = np.round(self.param.w / self.param.px_per_mm)
+                self.param.physical_w = int(np.round(self.param.w / self.param.px_per_mm))
         else:
             self.param.pw = self.w_box.value()
-            self.param.ph = self.h_box.value()
+
+            # in case we force the rect to be the same ratio as the bitmap, we only trust GUI w and h is dependent
+            if not self.param.force_equal_ratio:
+                self.param.ph = self.h_box.value()
+            else:
+                self.param.ph = np.round(self.w_box.value() * self.param.bitmap_h / self.param.bitmap_w)
+
             self.param.ppad = self.pad_box.value()
+
+
+
         self.param.paramChanged.emit() # emit signal -> call gui refresh
 
 class MetadataPanel(QWidget):
