@@ -2,7 +2,7 @@ import numpy as np
 import sys
 import time
 
-from PyQt5.QtCore import QTimer, QRect, QPoint
+from PyQt5.QtCore import QTimer, QRect, QPoint, QLine, Qt
 from PyQt5.QtGui import QPainter, QBrush, QPen, QColor
 from PyQt5.QtWidgets import (
     QApplication,
@@ -35,6 +35,8 @@ class StimulusApp:
 
 class StimulusControlWindow(QMainWindow):
     """
+    Main GUI window
+
     Things to implement
     - start/stop push button
     - check box / line edit to specify if/where to save things
@@ -66,29 +68,33 @@ class StimulusControlWindow(QMainWindow):
         self.param.load_config_from_json()
         self.param.is_panorama = is_panorama
 
+        # state flags and timestamps
+        self.stimulus_running = False
+        self.t0 = 0
+
+        ### Create Widgets ###
         # create a stimulus window, pass null parent, and parameter reference
         self.stimulus_window = StimulusWindow(None, param=self.param)
         self.stimulus_window.show()
-
-        # make sure the stimulus window paint area is updated appropriately as we change parameters
-        self.param.paramChanged.connect(self.stimulus_window.repaint)
 
         # prepare UI panels
         self.ui = StimulusControlPanel(self.param) # pass reference to parameters
         self.setCentralWidget(self.ui)
 
+        ### Connect Signals to Callbacks ###
+        # make sure the stimulus window paint area is updated appropriately as we change parameters
+        self.param.paramChanged.connect(self.stimulus_window.repaint)
+
         # define ui callback
         self.ui.start_button.clicked.connect(self.toggle_run_state)
         self.ui.reset_button.clicked.connect(self.reset_stimulus)
+        self.ui.calibration_panel.panelOpened.connect(lambda: self.stimulus_window.toggle_calibration_frame(True))
+        self.ui.calibration_panel.panelClosed.connect(lambda: self.stimulus_window.toggle_calibration_frame(False))
 
         # stimulus update timer
         self.timer = QTimer()
         self.timer.setInterval(1000 // 60) # aim 60 Hz
         self.timer.timeout.connect(self.stimulus_update)
-
-        # flags and timestamps
-        self.stimulus_running = False
-        self.t0 = 0
 
     def toggle_run_state(self):
         if not self.stimulus_running:
@@ -146,8 +152,12 @@ class StimulusWindow(QWidget):
         self.prect = None # for panorama
         self.param = param # reference to parent parameters (= it is synchronized -- we are not copying anything)
 
-        # ndarray of stimulus
+        # ndarray of stimulus frame
         self.frame = None
+
+        # flags
+        self.show_calibration_frame = False # if true, show a frame around the paint area
+
 
     def paintEvent(self, event):
         """
@@ -174,10 +184,25 @@ class StimulusWindow(QWidget):
         # with the same ratio as the rect.
 
 
+        """ Draw the stimulus bitmap """
         if self.frame is not None:
             qp.setBrush(QColor(*np.random.randint(0,255,3).astype(int)))
+            qp.setPen(Qt.NoPen)
             qp.drawImage(QRect(self.param.x, self.param.y, self.param.w, self.param.h),
                          array2qimage(self.frame))
+
+        """ Draw frame around the paint area """
+        if self.show_calibration_frame:
+            qp.setBrush(Qt.NoBrush)
+            thick_pen = QPen(QColor(255, 0, 127))
+            thick_pen.setWidth(3)
+            qp.setPen(thick_pen)
+            qp.drawRect(QRect(self.param.x, self.param.y, self.param.w, self.param.h)) # frame
+            qp.drawLine(QLine(self.param.x, self.param.y+self.param.h//2,
+                              self.param.x+self.param.w, self.param.y+self.param.h//2))
+            qp.drawLine(QLine(self.param.x+self.param.w//2, self.param.y,
+                              self.param.x+self.param.w//2, self.param.y+self.param.h))
+
         qp.end()
 
     def receive_and_paint_new_frame(self, frame):
@@ -188,3 +213,7 @@ class StimulusWindow(QWidget):
         self.frame = frame
         self.repaint()
 
+    def toggle_calibration_frame(self, state):
+        """ As we open/close the calibration panel (under ui),
+        toggle the calibration frame around the paint area """
+        self.show_calibration_frame = state
