@@ -13,10 +13,10 @@ class StimulusWindow(QWidget):
     """
     The second window on which we present stimuli to be viewed by the animals
     """
-    def __init__(self, *args, param, **kwargs):
+    def __init__(self, *args, param, corner, **kwargs):
         super().__init__(*args, **kwargs)
         self.setWindowTitle('Stimulus Window')
-        self.setGeometry(500, 500, 500, 500)
+        self.setGeometry(corner[0], corner[1], 500, 500)
         self.setStyleSheet("background-color: black;")
 
         # prepare attributes to store painting area rects
@@ -74,6 +74,7 @@ class StimulusWindow(QWidget):
         # generator, or alternatively we could force stimulus generator to listen to the app and generate stimuli
         # with the same ratio as the rect.
 
+        qp.setRenderHint(QPainter.SmoothPixmapTransform) # not sure if I want this
 
         """ Draw the stimulus bitmap """
         if self.frame is not None:

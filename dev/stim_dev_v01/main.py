@@ -19,10 +19,17 @@ class StimulusApp:
     """
     def __init__(self, stimulus_generator, is_panorama=False):
         app = QApplication([])
-        # Instantiate the main GUI window
-        # You need to pass a stimulus generator object, which should have an update method that returns bitmap
-        # to be painted.
-        win = StimulusControlWindow(stimulus_generator, is_panorama)
+        # check if we have multiple screens
+        screens = app.screens()
+        if len(screens) > 1: # if we have multiple screens, we show the stimulus window maximized at the last screen
+            stim_window_corner = (screens[-1].geometry().left(), screens[-1].geometry().top())
+            maximize_stim_window = True
+        else: # otherwise we show the screen in the main window without maximization
+            stim_window_corner = (400, 100)
+            maximize_stim_window = False
+
+        # Instantiate the main GUI window while passing the stimulus generator object
+        win = StimulusControlWindow(stimulus_generator, is_panorama, stim_window_corner, maximize_stim_window)
         # show the window
         win.show()
         # start the application (exit the interpreter once the app closes)
@@ -44,7 +51,7 @@ class StimulusControlWindow(QMainWindow):
     - parameters -- probably no need to dynamically update this?
     """
 
-    def __init__(self, stimulus_generator, is_panorama):
+    def __init__(self, stimulus_generator, is_panorama, stim_window_corner, maximize_stim_window):
         """
         The main window constructor. Called once at the beginning.
         """
@@ -70,8 +77,11 @@ class StimulusControlWindow(QMainWindow):
 
         ### Create Widgets ###
         # create a stimulus window, pass null parent, and parameter reference
-        self.stimulus_window = StimulusWindow(None, param=self.param)
-        self.stimulus_window.show()
+        self.stimulus_window = StimulusWindow(None, param=self.param, corner=stim_window_corner)
+        if maximize_stim_window:
+            self.stimulus_window.showMaximized()
+        else:
+            self.stimulus_window.show()
 
         # prepare UI panels
         self.ui = StimulusControlPanel(self.param) # pass reference to parameters
@@ -116,7 +126,16 @@ class StimulusControlWindow(QMainWindow):
         t = time.time() - self.t0
 
         # give the time stamp to the stimulus generator object, get the frame bitmap
-        stim_frame = self.stimulus_generator.update(t)
+        if not self.param.is_panorama:
+            stim_frame = self.stimulus_generator.update(
+                t=t,
+                paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm)
+            )
+        else:
+            # when we are working on a panoramic setup, the desired scale of stimuli should be
+            # determined by the geometry of the physical setup itself. Such that, the stimulus
+            # generator should be OK remaining agnostic about
+            stim_frame = self.stimulus_generator.update(t=t)
 
         # if the shape of the bitmap has changed, we call parameter refresh, in case if we need to change the rect
         if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
