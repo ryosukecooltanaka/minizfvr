@@ -6,8 +6,10 @@ Eventually combine everything into one place
 
 import numpy as np
 import cv2
+from PyQt5.QtCore import pyqtSignal
 from PyQt5.QtWidgets import (
     QLineEdit,
+    QLabel
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QWheelEvent
@@ -74,6 +76,43 @@ class TypeForcedEdit(QLineEdit):
         tick_delta = float(event.angleDelta().y()) / 120.0
         self.setValue(self.val + tick_delta*self.scroll_step) # casting happens inside
         self.editingFinished.emit()
+
+
+
+class roundButton(QLabel):
+    """
+    For the stimulus window, we do not want the titlebar to be showing because it can be bright
+    Instead, we will show a subtle round icon, based on LineEdit
+    """
+
+    clicked = pyqtSignal() # make it clickable
+
+    def __init__(self, *args, color_rgb=(255, 0, 0), radius=10, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.color_rgb = color_rgb
+        self.radius = radius
+        self.resize(radius*2, radius*2)
+        self.changeAlpha(30)
+
+    def changeAlpha(self, alpha):
+        self.setStyleSheet(
+            """
+            text-align: center;
+            background-color: rgba({0}, {1}, {2}, {3}%);
+            border-radius: {4}px;
+            """.format(*self.color_rgb, alpha, self.radius)
+        )
+
+    def mousePressEvent(self, e):
+        self.clicked.emit()
+
+
+    def enterEvent(self, *args, **kwargs):
+        self.changeAlpha(100)
+
+    def leaveEvent(self, *args, **kwargs):
+        self.changeAlpha(30)
+
 
 
 
