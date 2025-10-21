@@ -8,9 +8,35 @@ Use python dataclass to simplify boiler plates
 But basically it's just a bunch of attribtues
 """
 
+class BaseParams:
+    """
+    Implement methods to read/write parameters from json
+    """
+    def load_config_from_json(self, config_path = './config.json'):
+        if os.path.isfile(config_path):
+            print('Loading parameters from from ', config_path)
+            with open(config_path, 'r') as f:
+                config_dict = json.load(f)
+                self.read_param_from_dict(config_dict, verbose=True)
+
+    def save_config_into_json(self, config_path = './config.json'):
+        with open(config_path, 'w', encoding='utf-8') as f:
+            json.dump(self.__dict__, f, ensure_ascii=False, indent=4)
+
+    def read_param_from_dict(self, param_dict, verbose=False):
+        for key in param_dict.keys():
+            if hasattr(self, key):  # so we don't inject weird attributes
+                setattr(self, key, param_dict[key])
+                if verbose:
+                    print('loaded', key, '=', param_dict[key])
+            else:
+                if verbose:
+                    print(key, 'is not a valid parameter name!')
+
+
 
 @dataclass
-class TailTrackerParams:
+class TailTrackerParams(BaseParams):
 
     # camera settings
     camera_type: str = None
@@ -33,27 +59,6 @@ class TailTrackerParams:
 
     # visualization related parameters
     angle_trace_length: int = 1000
-
-    def load_config_from_json(self, config_path = './config.json'):
-        if os.path.isfile(config_path):
-            print('Loading parameters from from ', config_path)
-            with open(config_path, 'r') as f:
-                config_dict = json.load(f)
-                self.read_param_from_dict(config_dict, verbose=True)
-
-    def save_config_into_json(self, config_path = './config.json'):
-        with open(config_path, 'w', encoding='utf-8') as f:
-            json.dump(self.__dict__, f, ensure_ascii=False, indent=4)
-
-    def read_param_from_dict(self, param_dict, verbose=False):
-        for key in param_dict.keys():
-            if hasattr(self, key):  # so we don't inject weird attributes
-                setattr(self, key, param_dict[key])
-                if verbose:
-                    print('loaded', key, '=', param_dict[key])
-            else:
-                if verbose:
-                    print(key, 'is not a valid parameter name!')
 
 
 

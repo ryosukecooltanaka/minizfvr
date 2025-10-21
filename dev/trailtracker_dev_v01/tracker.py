@@ -1,8 +1,11 @@
 import numpy as np
 import multiprocessing as mp
 from multiprocessing import shared_memory
-
+from multiprocessing.connection import Listener
+from queue import Empty
+from time import sleep
 from utils import preprocess_image, center_of_mass_based_tracking, encode_frame_to_array, decode_array_to_frame
+from communication import Sender
 
 class TrackerObject():
     """
@@ -16,14 +19,17 @@ class TrackerObject():
     def __init__(self, param_dict):
         self.param = param_dict # this will be a parameter dictionary
         self.exit_acquisition_event = mp.Event()  # this is a flag used to exit while loop, shared across processes
+        self.connect_event = mp.Event()
 
         # placeholder for a dict of shared memory handles -- to be initialized upon the process start
         self.shared_memories = None
         # placeholder for a dict of ndarrays based off of the shared memory content
         self.shared_arrays = None
 
+
         # A counter for angle history buffer update
         self.ii = 0
+        self.conn = None
 
     def continuously_track_tail(self, timestamp_queue, param_queue):
         """
@@ -33,18 +39,31 @@ class TrackerObject():
         """
         print('Start tracking process')
 
-        self.receive_parameter(param_queue) # get the initial parameter (needed for shared memory initialization)
+        try:
+            self.param = param_queue.get_nowait()
+        except Empty:
+            print('initial param load failed -- queue empty', flush=True)
+
         self.initialize_shared_memory()
+        listener = Listener(('localhost', 6000))
 
         while not self.exit_acquisition_event.is_set():
+
+            if self.connect_event.is_set():
+                print('Connect event received by the tracker -- attempting to connect', flush=True)
+                self.conn = listener.accept()
+                self.connect_event.clear()
+
             # check parameter queue for new parameters -- parameter change happens very infrequently,
             # so I will assume that the param_queue is either empty or has only one entry
-            self.receive_parameter(param_queue)
+            try:
+                self.param = param_queue.get_nowait()
+                print('new parameter received', flush=True)
+            except Empty:
+                pass
 
-            # if we receive a new timestamp, that means the raw image is updated so we do tracking
-            # this assumes that the tracking is faster than camera frames
-            while not timestamp_queue.empty():
-                timestamp = timestamp_queue.get(block=False)
+            try:
+                timestamp = timestamp_queue.get_nowait()
                 # get the content of the frame queue (from the camera process)
                 frame = decode_array_to_frame(self.shared_arrays['current_raw_frame'])
                 # do the preprocessing
@@ -55,31 +74,27 @@ class TrackerObject():
                                                                  (self.param['tip_x'], self.param['tip_y']),
                                                                   self.param['n_segments'],
                                                                   self.param['search_area'])
+
+                d_angle = float(angles[-1]-angles[0])
                 # send tracking results to stimulus program through the named pipe
-                self.send_angle_through_pipe(angles[-1]-angles[0], timestamp)
+                self.send_angle_through_pipe(d_angle, timestamp)
 
                 # write results into the shared memory array so the main process can see it
                 # note that this function mutate the content of the input array
                 encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
                 self.shared_arrays['current_segment'][:, :self.param['n_segments']+1] = segments[:]
-                self.shared_arrays['angle_history'][0, self.ii] = angles[-1] - angles[0]
+                self.shared_arrays['angle_history'][0, self.ii] = d_angle
                 self.shared_arrays['angle_history'][1, self.ii] = timestamp
-
                 self.ii = (self.ii + 1) % self.param['angle_trace_length']
+            except Empty:
+                pass
 
-        print('Exited tracking while loop')
+
+        print('Exited tracking while loop!', flush=True)
         [self.shared_memories[x].close() for x in self.shared_memories.keys()]
-
-    def receive_parameter(self, queue):
-        """
-        Does what it says
-        """
-        if not queue.empty():
-            try:  # expect to receive parameter as dict
-                print('New parameter received by the child process')
-                self.param = queue.get()
-            except:
-                print('invalid object was passed to the parameter queue')
+        if self.conn is not None:
+            self.conn.close()
+        listener.close()
 
     def initialize_shared_memory(self):
         """
@@ -104,8 +119,11 @@ class TrackerObject():
             angle_history   = np.ndarray((2, self.param['angle_trace_length']), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
         )
 
-    def send_angle_through_pipe(self, tail_angle, timestamp):
+    def send_angle_through_pipe(self, d_angle, timestamp):
         """
         Send tracking results to whatever stimulus presentation program through the named Pipe
         """
-        pass
+
+        if self.conn is not None:
+            self.conn.send((d_angle, timestamp))
+

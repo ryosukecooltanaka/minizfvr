@@ -9,7 +9,9 @@ from PyQt5.QtWidgets import (
     QCheckBox,
     QGridLayout,
     QLabel,
-    QSlider
+    QSlider,
+    QPushButton,
+    QSizePolicy
 )
 
 
@@ -103,6 +105,7 @@ class ControlPanel(QWidget):
 
         # Prepare widgets that control the parameters
         # preprocessing parameters
+        self.connect_button = QPushButton('Connect') # attempt connection to the stimulus window
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
         self.image_scale_box = TypeForcedEdit(float) # subclassed to only allow specific numeric types
@@ -127,22 +130,24 @@ class ControlPanel(QWidget):
         self.clip_threshold_slider.setTickPosition(QSlider.TicksBelow)
 
         # arrange preprocessing control widget into a grid layout
-        preproc_grid = QGridLayout()
-        preproc_grid.addWidget(self.show_raw_checkbox, 0, 0, 1, 1) # row, col, rowspan, colspan
-        preproc_grid.addWidget(self.color_invert_checkbox, 1, 0, 1, 1)
-        preproc_grid.addWidget(QLabel("Image Scale"), 0, 1, 1, 1, Qt.AlignCenter)
-        preproc_grid.addWidget(self.image_scale_box,  1, 1, 1, 1)
-        preproc_grid.addWidget(QLabel("Filter Size"),  0, 2, 1, 1, Qt.AlignCenter)
-        preproc_grid.addWidget(self.filter_size_slider, 1, 2, 1, 1)
-        preproc_grid.addWidget(QLabel("Clip Threshold"),  0, 3, 1, 1, Qt.AlignCenter)
-        preproc_grid.addWidget(self.clip_threshold_slider, 1, 3, 1, 1)
+        grid = QGridLayout()
+        self.connect_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+        grid.addWidget(self.connect_button,        0, 0, 2, 1)
+        grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
+        grid.addWidget(self.color_invert_checkbox, 1, 1, 1, 1)
+        grid.addWidget(QLabel("Image Scale"),      0, 2, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.image_scale_box,       1, 2, 1, 1)
+        grid.addWidget(QLabel("Filter Size"),      0, 3, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.filter_size_slider,    1, 3, 1, 1)
+        grid.addWidget(QLabel("Clip Threshold"),   0, 4, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.clip_threshold_slider, 1, 4, 1, 1)
 
         # Cosmetic size adjustment
         self.image_scale_box.setMaximumWidth(50)
-        preproc_grid.setColumnStretch(2, 2)
-        preproc_grid.setColumnStretch(3, 2)
+        grid.setColumnStretch(3, 2)
+        grid.setColumnStretch(4, 2)
 
-        self.setLayout(preproc_grid)
+        self.setLayout(grid)
 
     def set_current_value(self, p:TailTrackerParams):
         """

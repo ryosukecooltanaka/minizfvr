@@ -11,6 +11,7 @@ from PyQt5.QtWidgets import (
 from parameters import StimParamObject
 from stim_window import StimulusWindow
 from panels import StimulusControlPanel
+from communication import Receiver
 
 class StimulusApp:
     """
@@ -99,20 +100,24 @@ class StimulusControlWindow(QMainWindow):
         self.ui.calibration_panel.panelOpened.connect(lambda: self.stimulus_window.toggle_calibration_frame(True))
         self.ui.calibration_panel.panelClosed.connect(lambda: self.stimulus_window.toggle_calibration_frame(False))
 
+        # receiver
+        self.receiver = Receiver()
+        self.receiver.open_connection() # unless a listener is already open, this fails -- in which case, click the connect button
+        self.ui.connect_button.clicked.connect(self.receiver.open_connection)
+
         # Timed stimulus update
         self.timer = QTimer()
         self.timer.setInterval(1000 // 60) # aim 60 Hz
         self.timer.timeout.connect(self.stimulus_update)
+        self.timer.start()
 
     def toggle_run_state(self):
         if not self.stimulus_running:
             self.stimulus_running = True
-            self.timer.start()
             self.t0 = time.time()
             self.ui.start_button.setText('Stop')
         else:
             self.stimulus_running = False
-            self.timer.stop()
             self.ui.start_button.setText('Start')
 
     def reset_stimulus(self):
@@ -122,29 +127,40 @@ class StimulusControlWindow(QMainWindow):
         """
         Called every timer update
         """
-        # get current time stamp
-        t = time.time() - self.t0
 
-        # give the time stamp to the stimulus generator object, get the frame bitmap
-        if not self.param.is_panorama:
-            stim_frame = self.stimulus_generator.update(
-                t=t,
-                paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm)
-            )
-        else:
-            # when we are working on a panoramic setup, the desired scale of stimuli should be
-            # determined by the geometry of the physical setup itself. Such that, the stimulus
-            # generator should be OK remaining agnostic about
-            stim_frame = self.stimulus_generator.update(t=t)
+        vigor = 0
+        if self.receiver.conn is not None:
+            data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
+            if data is not None:
+                vigor = np.std([x[0] for x in data])
 
-        # if the shape of the bitmap has changed, we call parameter refresh, in case if we need to change the rect
-        if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
-            self.param.bitmap_h, self.param.bitmap_w = stim_frame.shape[:2]
-            self.ui.calibration_panel.refresh_param()
 
-        # pass the frame bitmap to the StimulusWindow, and paint
-        self.stimulus_window.receive_and_paint_new_frame(stim_frame)
+
+        if self.stimulus_running:
+            t = time.time() - self.t0
+
+            # give the time stamp to the stimulus generator object, get the frame bitmap
+            if not self.param.is_panorama:
+                stim_frame = self.stimulus_generator.update(
+                    t=t,
+                    paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm),
+                    vigor=vigor
+                )
+            else:
+                # when we are working on a panoramic setup, the desired scale of stimuli should be
+                # determined by the geometry of the physical setup itself. Such that, the stimulus
+                # generator should be OK remaining agnostic about
+                stim_frame = self.stimulus_generator.update(t=t)
+
+            # if the shape of the bitmap has changed, we call parameter refresh, in case if we need to change the rect
+            if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
+                self.param.bitmap_h, self.param.bitmap_w = stim_frame.shape[:2]
+                self.ui.calibration_panel.refresh_param()
+
+            # pass the frame bitmap to the StimulusWindow, and paint
+            self.stimulus_window.receive_and_paint_new_frame(stim_frame)
 
     def closeEvent(self, event):
         self.stimulus_window.close()
+        self.receiver.close()
         self.param.save_config_into_json()

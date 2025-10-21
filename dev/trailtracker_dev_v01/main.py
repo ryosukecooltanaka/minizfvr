@@ -38,6 +38,7 @@ from panels import CameraPanel, AnglePanel, ControlPanel
 from tracker import TrackerObject
 from parameters import TailTrackerParams
 
+# TO DO: Make the parameter QObject and combine things through signals
 
 class MiniZFTT(QMainWindow):
     """
@@ -99,6 +100,7 @@ class MiniZFTT(QMainWindow):
         # wouldn't know if the shared frame memory was updated or not.
         self.timestamp_queue = mp.Queue(maxsize=10) # pass timestamps
         self.param_queue = mp.Queue(maxsize=10) # passing parameters to the tracking process
+
         # send the initial parameter, because the tracking process needs a parameter for initialization
         self.param_queue.put(self.parameters.__dict__)
 
@@ -127,6 +129,8 @@ class MiniZFTT(QMainWindow):
         self.acquisition_process.start()
         self.tracking_process.start()
         self.gui_timer.start()
+
+
 
     def arrange_widgets(self):
         """
@@ -168,6 +172,7 @@ class MiniZFTT(QMainWindow):
         self.control_panel.image_scale_box.editingFinished.connect(self.update_parameters)
         self.control_panel.filter_size_slider.sliderReleased.connect(self.update_parameters)
         self.control_panel.clip_threshold_slider.sliderReleased.connect(self.update_parameters)
+        self.control_panel.connect_button.clicked.connect(self.tracker.connect_event.set)
 
     """
     Methods called continuously during the run
@@ -255,7 +260,10 @@ class MiniZFTT(QMainWindow):
         self.camera_panel.level_adjust_flag = True
 
         # Send parameter to the child process running the tracker through the queue
+        print('Put new parameters into the cue')
         self.param_queue.put(self.parameters.__dict__)
+
+
 
     """
     Methods called once at the end

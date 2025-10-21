@@ -106,8 +106,10 @@ class roundButton(QLabel):
     def mousePressEvent(self, e):
         self.clicked.emit()
 
-
     def enterEvent(self, *args, **kwargs):
+        """
+        The button becomes opaque on hover
+        """
         self.changeAlpha(100)
 
     def leaveEvent(self, *args, **kwargs):

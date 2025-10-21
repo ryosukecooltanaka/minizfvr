@@ -64,16 +64,6 @@ class StimulusWindow(QWidget):
         # the paint method should read rect information from the parent and use it to scale things
         # also there should be a choice of doing 1 window vs 3 window
 
-        # todo: Fix how to handle paint scaling
-        # Right now we specify the paint area rect from GUI and stretch whatever image returned by the stimulus
-        # generator to this rect (instead of for example corresponding single image pixel to single device pixel)
-        # This makes sense especially for panorama setups, where I would stretch whatever rendered frame to fit
-        # physical screens on the spot (trusting the geometry of the setup). But if we are doing bottom projection
-        # and specifying the stimuli in mm units, this can accidentally introduce weird stretching.
-        # We could force the GUI-specified rect to retain the same ratio as the frame churned out by the stimulus
-        # generator, or alternatively we could force stimulus generator to listen to the app and generate stimuli
-        # with the same ratio as the rect.
-
         qp.setRenderHint(QPainter.SmoothPixmapTransform) # not sure if I want this
 
         """ Draw the stimulus bitmap """
