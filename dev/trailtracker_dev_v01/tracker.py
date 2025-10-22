@@ -9,65 +9,86 @@ from communication import Sender
 
 class TrackerObject():
     """
-    This object will receive captured frames and processing parameters from a queue,
-    perform the tail tracking algorithm, and return the results to a queue.
-    We are separating out tail tracking into an object, so we can delegate this
-    to a separate process. This is important, because this is the most CPU heavy
-    thing we do, and it is important we can do this fast.
+    This object reads the acquired camera frame from the shared memory, and performs the preprocessing & tracking
+    on it, and return the results into other shared memory. In addition, the results of tracking will be sent to
+    the stimulus programs through a named pipe. These operations are performed continuously in a while loop in the
+    continuously_track_tail() method. The while loop ensures that the acquired frame is immediately processed for
+    closed loop with minimal lag. So as not to block the GUI for the while loop, this task will be delegated to
+    a child process using the multiprocessing module.
     """
 
     def __init__(self, param_dict):
+        """
+        Constructor
+        Note that this object will be pickled and copied into a child process. Thus, we cannot hold any complex
+        object as an instance attribute.
+        """
+
+        # initial parameter will be loaded from an obligate argument
         self.param = param_dict # this will be a parameter dictionary
-        self.exit_acquisition_event = mp.Event()  # this is a flag used to exit while loop, shared across processes
-        self.connect_event = mp.Event()
 
-        # placeholder for a dict of shared memory handles -- to be initialized upon the process start
+        # Event() object are boolean flags that can be accessed across processes
+        self.exit_acquisition_event = mp.Event()  # this will be set true when the parent exits
+        self.connect_event = mp.Event() # this will be set when we press Connect button in the GUI
+
+        # Placeholders for shared memories -- will be initialized in the child process
         self.shared_memories = None
-        # placeholder for a dict of ndarrays based off of the shared memory content
         self.shared_arrays = None
-
 
         # A counter for angle history buffer update
         self.ii = 0
+
+        # We will store connection object as an attribute (for the convenience)
         self.conn = None
 
     def continuously_track_tail(self, timestamp_queue, param_queue):
         """
         Continuously perform tail tracking (run in a child process)
-        Read frames and parameters from the queues
-        Put the results in the queue
+        Receive parameters from param_queue (from the main process, if there is any change)
+        Receive timestamp from the camera object through timestamp_queue
+        If there is a new timestamp, that means there is a new frame to be processed, so we look into the shared memory
+        and perform tail tracking on the frame
+        Then, register the tail tracking results into another shared memory, as well as sending it to the stimulus
+        program through the named pipe.
         """
-        print('Start tracking process')
 
-        try:
-            self.param = param_queue.get_nowait()
-        except Empty:
-            print('initial param load failed -- queue empty', flush=True)
+        print('Start tracking process', flush=True)
 
+        # initialize shared memory
         self.initialize_shared_memory()
+
+        # Crate the connection (open the port)
         listener = Listener(('localhost', 6000))
 
+        # Do the tracking continuously
+        # We will exit this loop if we receive the flag from the main GUI
         while not self.exit_acquisition_event.is_set():
 
+            # We try to open the connection when we click the connect button
             if self.connect_event.is_set():
                 print('Connect event received by the tracker -- attempting to connect', flush=True)
                 self.conn = listener.accept()
                 self.connect_event.clear()
 
-            # check parameter queue for new parameters -- parameter change happens very infrequently,
-            # so I will assume that the param_queue is either empty or has only one entry
+            # Check parameter queue for new parameters
+            # We use try/catch as opposed to queue.empty(), because apparently the latter is not reliable
             try:
                 self.param = param_queue.get_nowait()
                 print('new parameter received', flush=True)
             except Empty:
                 pass
 
+            # If there is any new timestamp in the queue that is not processed, that means that the frame in the
+            # shared memory is new. So we do tracking
             try:
                 timestamp = timestamp_queue.get_nowait()
+
                 # get the content of the frame queue (from the camera process)
                 frame = decode_array_to_frame(self.shared_arrays['current_raw_frame'])
+
                 # do the preprocessing
                 processed_frame = preprocess_image(frame, **self.param)
+
                 # do the tracking
                 segments, angles = center_of_mass_based_tracking(processed_frame,
                                                                  (self.param['base_x'], self.param['base_y']),
@@ -76,8 +97,9 @@ class TrackerObject():
                                                                   self.param['search_area'])
 
                 d_angle = float(angles[-1]-angles[0])
+
                 # send tracking results to stimulus program through the named pipe
-                self.send_angle_through_pipe(d_angle, timestamp)
+                self.send_angle_through_pipe(timestamp, d_angle)
 
                 # write results into the shared memory array so the main process can see it
                 # note that this function mutate the content of the input array
@@ -119,11 +141,11 @@ class TrackerObject():
             angle_history   = np.ndarray((2, self.param['angle_trace_length']), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
         )
 
-    def send_angle_through_pipe(self, d_angle, timestamp):
+    def send_angle_through_pipe(self, timestamp, d_angle):
         """
         Send tracking results to whatever stimulus presentation program through the named Pipe
         """
 
         if self.conn is not None:
-            self.conn.send((d_angle, timestamp))
+            self.conn.send((timestamp, d_angle))
 

@@ -61,34 +61,47 @@ class MiniZFTT(QMainWindow):
         self.parameters = TailTrackerParams()
         self.parameters.load_config_from_json()
 
-        # Create other widgets & arrange them
+        # Create other widgets & arrange them onto the main window
         self.camera_panel = CameraPanel(**self.parameters.__dict__)
         self.angle_panel = AnglePanel()
         self.control_panel = ControlPanel()
         self.message_strip = QLabel()
         self.arrange_widgets()
 
-        # Select camera / create a camera object
+        ## Select camera / create a camera object
+        # The camera object runs in a separate child process, and continuously read camera frames in a while loop,
+        # and put the camera frame into the shared memory, which can be accessed from other processes.
         self.camera = SelectCameraByName(self.parameters.camera_type, **self.parameters.__dict__)
-        # Create a tracking object
+
+        ## Create a tracker object
+        # The tracker object runs in a separate child process, and continuously run the tracking algorithm on the
+        # acquired camera frame that is copied into the shared memory. Then the tracker object will send back the
+        # tail angle history back to the main window through a shared memory so it can be plotted on the main GUI.
+        # In addition, the tracker object will send the tail angle with associated time stamp to whatever stimulus
+        # program through a named pipe using multiprocessing.Listener().
         self.tracker = TrackerObject(self.parameters.__dict__)
 
-        ## Prepare shared_memory so processes can pass around data
-        # This is faster and less CPU-intensive than Queue, which require each process to pickle/unpickle data which
-        # becomes more time-consuming as the data gets bigger.
+        ## Prepare shared_memory so we can pass around data across processes
+        # We use shared memory because it is faster and less CPU-intensive than Queue, which require each process to
+        # pickle/unpickle data which becomes more time-consuming as the data gets bigger.
+
         # Memory for raw and processed image data. Because we do not know the camera frame size until we kick-start
         # the camera process, we just reserve 1MB each for these
         self.raw_frame_memory = shared_memory.SharedMemory(create=True, name='raw_frame_memory', size=1000000)
         self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
+
         # Memory for storing the latest tracked segment positions for the sake of visualization.
         # Max 10 segments x {x, y} x float64 (8 bytes) = 160 bytes
         self.segment_memory = shared_memory.SharedMemory(create=True, name='segment_memory', size=160)
+
         # Memory for the history of the tail angle and associated time stamps.
         # length is decided by angle_trace_length parameter (x 8byte float x 2)
         self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=16*self.parameters.angle_trace_length)
 
-        ## create numpy arrays that refers to the shared memory we allocated
-        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf) # these are intentionally 1d, because the frame shapes can change dynamically
+        ## Create numpy arrays that refers to the shared memory we allocated
+        # For the raw and processed image frames, we store data as 1d array, because the shape of the frame can
+        # dynamically change. We will reshape these 1d array into 2d whenever we need to perform operations on 2d.
+        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.current_segments = np.ndarray((2, 10), dtype=np.float64, buffer=self.segment_memory.buf)
         self.angle_history = np.ndarray((2, self.parameters.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
@@ -101,14 +114,16 @@ class MiniZFTT(QMainWindow):
         self.timestamp_queue = mp.Queue(maxsize=10) # pass timestamps
         self.param_queue = mp.Queue(maxsize=10) # passing parameters to the tracking process
 
-        # send the initial parameter, because the tracking process needs a parameter for initialization
+        # Send the initial parameter, because the tracking process needs a parameter for initialization
         self.param_queue.put(self.parameters.__dict__)
 
         ## Delegate frame acquisition to a child process
-        # By calling mp.Process, we create a child process and send a copy of the camera/tracking objects there.
+        # By calling mp.Process, we create a child process and send a copy of the camera/tracker objects there.
         # These objects will be Pickled to be copied, and there are certain things that cannot be pickled (e.g.,
         # things with non-python backend, file handles etc.). or this reason, we call the camera initialization
         # in the child process, at the beginning of the continuous acquisition process (rather than in the constructor).
+        # In the child process, methods specified as 'targets' will run -- both of which run continuously with a while
+        # loop.
         self.acquisition_process = mp.Process(target=self.camera.continuously_acquire_frames, args=(self.timestamp_queue,), name='acquisition process')
         self.tracking_process = mp.Process(target=self.tracker.continuously_track_tail, args=(self.timestamp_queue, self.param_queue,), name='tracking process')
 
@@ -117,7 +132,7 @@ class MiniZFTT(QMainWindow):
         self.acquisition_process.daemon = True
         self.tracking_process.daemon = True
 
-        # Setup callback functions for the control panel GUI
+        # Setup callback functions for the control panel GUI.
         self.connect_control_callbacks()
 
         # Timers to update GUI
@@ -129,8 +144,6 @@ class MiniZFTT(QMainWindow):
         self.acquisition_process.start()
         self.tracking_process.start()
         self.gui_timer.start()
-
-
 
     def arrange_widgets(self):
         """
@@ -144,7 +157,7 @@ class MiniZFTT(QMainWindow):
         # Insert initial values from config into control panel GUI by passing the parameter object
         self.control_panel.set_current_value(self.parameters)
 
-        # The main window needs to have a single, central widget (which is just a empty container).
+        # The main window needs to have a single, central widget (which is just an empty container).
         # Widgets like buttons will be arranged inside the container later.
         container = QWidget()
         self.setCentralWidget(container)
@@ -166,12 +179,14 @@ class MiniZFTT(QMainWindow):
         container.setLayout(layout)
 
     def connect_control_callbacks(self):
+        # TODO: reimplement so everything goes through signals
         self.camera_panel.tail_standard.sigRegionChangeFinished.connect(self.update_parameters)
         self.control_panel.show_raw_checkbox.stateChanged.connect(self.update_parameters)
         self.control_panel.color_invert_checkbox.stateChanged.connect(self.update_parameters)
         self.control_panel.image_scale_box.editingFinished.connect(self.update_parameters)
         self.control_panel.filter_size_slider.sliderReleased.connect(self.update_parameters)
         self.control_panel.clip_threshold_slider.sliderReleased.connect(self.update_parameters)
+
         self.control_panel.connect_button.clicked.connect(self.tracker.connect_event.set)
 
     """
@@ -208,7 +223,8 @@ class MiniZFTT(QMainWindow):
 
         if any(self.angle_history[1, :] > 0):
 
-            # Angle panel update
+            # Angle panel update -- this feels kind of stupid (because we are sorting when only rolling is needed)
+            # but it works
             sort_ind = np.argsort(-self.angle_history[1, :])[self.angle_history[1, :]>0]
             self.angle_panel.set_data(self.angle_history[1,:][sort_ind]-np.max(self.angle_history[1,:]),
                                       self.angle_history[0,:][sort_ind])

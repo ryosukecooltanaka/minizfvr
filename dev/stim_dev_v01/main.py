@@ -12,6 +12,7 @@ from parameters import StimParamObject
 from stim_window import StimulusWindow
 from panels import StimulusControlPanel
 from communication import Receiver
+from estimator import Estimator
 
 class StimulusApp:
     """
@@ -67,14 +68,19 @@ class StimulusControlWindow(QMainWindow):
         # and return bitmap (ndarray) as an output. Otherwise it can be anything
         self.stimulus_generator = stimulus_generator
 
-        # Create a parameter object & load config
+        ## Create a parameter object & load config
         self.param = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
         self.param.load_config_from_json()
         self.param.is_panorama = is_panorama
 
+        ## Create an estimator object
+        self.estimator = Estimator()
+
         # state flags and timestamps
         self.stimulus_running = False
         self.t0 = 0
+        self.last_t = 0
+        self.dt = 0
 
         ### Create Widgets ###
         # create a stimulus window, pass null parent, and parameter reference
@@ -128,23 +134,25 @@ class StimulusControlWindow(QMainWindow):
         Called every timer update
         """
 
-        vigor = 0
+        t_now = time.time()
+        self.dt = t_now - self.last_t
+        self.last_t = t_now
+
         if self.receiver.conn is not None:
             data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
             if data is not None:
-                vigor = np.std([x[0] for x in data])
-
-
+                for this_data in data: # I think this is doing FIFO correctly?
+                    self.estimator.register_new_data(*this_data)
 
         if self.stimulus_running:
-            t = time.time() - self.t0
 
             # give the time stamp to the stimulus generator object, get the frame bitmap
             if not self.param.is_panorama:
                 stim_frame = self.stimulus_generator.update(
-                    t=t,
+                    dt=self.dt,
                     paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm),
-                    vigor=vigor
+                    vigor=self.estimator.vigor,
+                    laterality=self.estimator.laterality
                 )
             else:
                 # when we are working on a panoramic setup, the desired scale of stimuli should be
