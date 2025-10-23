@@ -30,6 +30,7 @@ class Camera():
         self.camera = None
         self.exit_acquisition_event = mp.Event() # this is a flag used to exit while loop, shared across processes
 
+
     def initialize(self, **kwargs):
         """
         Called in the child process at the beginning of continuous acquisition!
@@ -40,9 +41,11 @@ class Camera():
         """
         Fetch image.
         Return fetch success (bool), frame (np.ndarray), and timestamp (float?)
+        Use perf_counter to get the highest accuracy timestamp -- time.time() resolution can be affected by other
+        processes running, and can go down to mere 50Hz or so which is completely inadequate
         """
         time.sleep(0.002)
-        return True, np.random.randint(0, 255, (256, 256), 'uint8'), time.time()
+        return True, np.random.randint(0, 255, (256, 256), 'uint8'), time.perf_counter()
 
     def close(self):
         pass
@@ -87,7 +90,7 @@ class PointGreyCamera(Camera):
             converted_image = np.array(fetched_image.GetData(), dtype='uint8').reshape(
                 (fetched_image.GetHeight(), fetched_image.GetWidth()))
         fetched_image.Release()
-        return True, converted_image, time.time()
+        return True, converted_image, time.perf_counter()
 
     def close(self):
         """
@@ -126,9 +129,9 @@ class DummyCamera(Camera):
         read_success, frame = self.video.read()
         if read_success:
             self.frame_counter += 1
-            return True, frame[:, :, 0], time.time()
+            return True, frame[:, :, 0], time.perf_counter()
         else:
-            return False, None, time.time()
+            return False, None, time.perf_counter()
 
     def close(self):
         self.video.release()

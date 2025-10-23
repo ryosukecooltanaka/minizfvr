@@ -240,8 +240,10 @@ class MiniZFTT(QMainWindow):
             self.angle_panel.set_data(rolled_data[1, :]-latest_t, rolled_data[0, :])
 
             # Indicate frame rate
-            valid_timestamps = self.angle_history[1, :][self.angle_history[1, :] > 0]
-            self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(1 / np.median(np.diff(valid_timestamps))))
+            frame_rate = 1.0 / np.median(np.diff(rolled_data[1,:]))
+            self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
+
+
 
     def refresh_param(self):
         """
