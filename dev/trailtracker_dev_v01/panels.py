@@ -61,16 +61,19 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         tip_y = self.tail_standard.getLocalHandlePositions(1)[1].y() * factor
         return (base_x, base_y), (tip_x, tip_y)
 
-    def rescale_tail_standard(self, f):
+    def refresh_gui(self, f):
         """
-        When switching between showing raw and scaled images,
-        keep the tail standard in the same relative position
+        Refresh GUI (mostly the tail standard) -- triggered by parameter change
+        When switching between showing raw and scaled images,  keep the tail standard in the same relative position.
+        Also flag frame contrast adjustment.
         """
+        print('[Camera panel] refresh requested with f = {}'.format(f))
         base, tip = self.get_base_tip_position()
         for h, pos in zip(self.tail_standard.handles, (base, tip)):
             newPos = QPointF(*[val * f for val in pos])
             h['item'].setPos(newPos) # copied over from pyqtgraph source code -- not sure why we need item/pos
             h['pos']= newPos
+        self.level_adjust_flag = True
 
     def update_tracked_tail(self, segments, factor=1.0):
         self.tail_tracked.setData(segments[0, :]*factor, segments[1, :]*factor)
@@ -149,15 +152,18 @@ class ControlPanel(QWidget):
 
         self.setLayout(grid)
 
-    def set_current_value(self, p:TailTrackerParams):
+    def refresh_gui(self, p:TailTrackerParams):
         """
         Given the TailTrackerParam object, set the values of the widgets
         """
+        print('[Control panel] refresh requested ')
+        # Put the parameter received into the GUI
         self.show_raw_checkbox.setChecked(p.show_raw)
         self.color_invert_checkbox.setChecked(p.color_invert)
         self.image_scale_box.setValue(p.image_scale)
         self.filter_size_slider.setValue(p.filter_size)
         self.clip_threshold_slider.setValue(p.clip_threshold)
+
 
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\

@@ -36,13 +36,13 @@ from utils import decode_array_to_frame
 from camera import SelectCameraByName
 from panels import CameraPanel, AnglePanel, ControlPanel
 from tracker import TrackerObject
-from parameters import TailTrackerParams
+from parameters import TrackerParamObject
 
 # TO DO: Make the parameter QObject and combine things through signals
 
 class MiniZFTT(QMainWindow):
     """
-    Main tail tracker GUI window.
+    Main tail tracker GUI window class.
     Displays fish image, tail trace, and other controls.
     """
 
@@ -57,12 +57,13 @@ class MiniZFTT(QMainWindow):
         # Call the parental (QMainWindow) constructor
         super().__init__()
 
-        # Load config from file, as it is used for initialization
-        self.parameters = TailTrackerParams()
-        self.parameters.load_config_from_json()
+        # Prepare the parameter object, and load config
+        # Note that the parameter object inherits QObject and can emit signals
+        self.param = TrackerParamObject()
+        self.param.load_config_from_json()
 
         # Create other widgets & arrange them onto the main window
-        self.camera_panel = CameraPanel(**self.parameters.__dict__)
+        self.camera_panel = CameraPanel(**self.param.__dict__)
         self.angle_panel = AnglePanel()
         self.control_panel = ControlPanel()
         self.message_strip = QLabel()
@@ -71,7 +72,7 @@ class MiniZFTT(QMainWindow):
         ## Select camera / create a camera object
         # The camera object runs in a separate child process, and continuously read camera frames in a while loop,
         # and put the camera frame into the shared memory, which can be accessed from other processes.
-        self.camera = SelectCameraByName(self.parameters.camera_type, **self.parameters.__dict__)
+        self.camera = SelectCameraByName(self.param.camera_type, **self.param.__dict__)
 
         ## Create a tracker object
         # The tracker object runs in a separate child process, and continuously run the tracking algorithm on the
@@ -79,7 +80,7 @@ class MiniZFTT(QMainWindow):
         # tail angle history back to the main window through a shared memory so it can be plotted on the main GUI.
         # In addition, the tracker object will send the tail angle with associated time stamp to whatever stimulus
         # program through a named pipe using multiprocessing.Listener().
-        self.tracker = TrackerObject(self.parameters.__dict__)
+        self.tracker = TrackerObject(self.param.__dict__)
 
         ## Prepare shared_memory so we can pass around data across processes
         # We use shared memory because it is faster and less CPU-intensive than Queue, which require each process to
@@ -96,7 +97,7 @@ class MiniZFTT(QMainWindow):
 
         # Memory for the history of the tail angle and associated time stamps.
         # length is decided by angle_trace_length parameter (x 8byte float x 2)
-        self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=16*self.parameters.angle_trace_length)
+        self.angle_memory = shared_memory.SharedMemory(create=True, name='angle_memory', size=16*self.param.angle_trace_length)
 
         ## Create numpy arrays that refers to the shared memory we allocated
         # For the raw and processed image frames, we store data as 1d array, because the shape of the frame can
@@ -104,7 +105,7 @@ class MiniZFTT(QMainWindow):
         self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.current_segments = np.ndarray((2, 10), dtype=np.float64, buffer=self.segment_memory.buf)
-        self.angle_history = np.ndarray((2, self.parameters.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
+        self.angle_history = np.ndarray((2, self.param.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
         self.angle_history[:] = 0 # initialize
 
         ## Create Queues
@@ -115,7 +116,7 @@ class MiniZFTT(QMainWindow):
         self.param_queue = mp.Queue(maxsize=10) # passing parameters to the tracking process
 
         # Send the initial parameter, because the tracking process needs a parameter for initialization
-        self.param_queue.put(self.parameters.__dict__)
+        self.param_queue.put(self.param.__dict__)
 
         ## Delegate frame acquisition to a child process
         # By calling mp.Process, we create a child process and send a copy of the camera/tracker objects there.
@@ -155,7 +156,7 @@ class MiniZFTT(QMainWindow):
         self.setGeometry(50, 50, 400, 600)  # default window position and size (x, y, w, h)
 
         # Insert initial values from config into control panel GUI by passing the parameter object
-        self.control_panel.set_current_value(self.parameters)
+        self.control_panel.refresh_gui(self.param)
 
         # The main window needs to have a single, central widget (which is just an empty container).
         # Widgets like buttons will be arranged inside the container later.
@@ -179,13 +180,18 @@ class MiniZFTT(QMainWindow):
         container.setLayout(layout)
 
     def connect_control_callbacks(self):
-        # TODO: reimplement so everything goes through signals
-        self.camera_panel.tail_standard.sigRegionChangeFinished.connect(self.update_parameters)
-        self.control_panel.show_raw_checkbox.stateChanged.connect(self.update_parameters)
-        self.control_panel.color_invert_checkbox.stateChanged.connect(self.update_parameters)
-        self.control_panel.image_scale_box.editingFinished.connect(self.update_parameters)
-        self.control_panel.filter_size_slider.sliderReleased.connect(self.update_parameters)
-        self.control_panel.clip_threshold_slider.sliderReleased.connect(self.update_parameters)
+        ## If anything is changed in the camera panel or the control panel, refresh parameters
+        self.camera_panel.tail_standard.sigRegionChangeFinished.connect(self.refresh_param)
+        self.control_panel.show_raw_checkbox.stateChanged.connect(self.refresh_param)
+        self.control_panel.color_invert_checkbox.stateChanged.connect(self.refresh_param)
+        self.control_panel.image_scale_box.editingFinished.connect(self.refresh_param)
+        self.control_panel.filter_size_slider.sliderReleased.connect(self.refresh_param)
+        self.control_panel.clip_threshold_slider.sliderReleased.connect(self.refresh_param)
+
+        ## If the parameter is changed, updated the control panel GUI
+        # the paramChanged signal has a float argument for the tail rescaling factor (signified as f here)
+        self.param.paramChanged.connect(lambda f, p=self.param : self.control_panel.refresh_gui(p))
+        self.param.paramChanged.connect(lambda f  : self.camera_panel.refresh_gui(f))
 
         self.control_panel.connect_button.clicked.connect(self.tracker.connect_event.set)
 
@@ -196,90 +202,97 @@ class MiniZFTT(QMainWindow):
     def update_data_panels(self):
         """
         Update Camera and Angle Panels
-        This method should be called at like 20 Hz tops
+        This method will be called at like 20 Hz tops as the timer callback
         """
 
-        ## Reconstitute frame from the shared 1d array (casting because the array is uint8)
-        # this is not synchronized (i.e., we will show whatever is the latest)
-        if self.parameters.show_raw:
+        ## Reconstitute frame to show
+        # Frames are stored in memory block shared between processes as 1d array. We need to select either raw or
+        # processed data, and then reconstruct them into 2d array from 1d (we do this 1d trick, because we don't
+        # know the shape of the frames beforehand when we set up child processes. The size of the frames are encoded
+        # at the end of the 1d arrays.
+        if self.param.show_raw:
             frame_array = self.current_raw_frame
         else:
             frame_array = self.current_processed_frame
-
-        # if the frame_array is empty (in which case we do not have the size encoded at the end)
-        # skip the image update
+        # If the frame_array is empty (in which case we do not have the size encoded at the end) skip the image update
         if (frame_array[-1]>0) or (frame_array[-2]>0):
             self.camera_panel.set_image(decode_array_to_frame(frame_array))
 
-        # Tracked tail segment positions are in the coordinate of the processed (potentially resized) images.
+        # Tracked tail segment positions are in the pixel coordinate of the processed (potentially resized) images.
         # If we are showing the raw frame, we need to account for the resizing factor.
-        if self.parameters.show_raw:
-            factor = 1.0 / self.parameters.image_scale
+        if self.param.show_raw:
+            factor = 1.0 / self.param.image_scale
         else:
             factor = 1.0
 
-        # Camera panel tracked tail line update
-        self.camera_panel.update_tracked_tail(self.current_segments[:, :self.parameters.n_segments+1], factor=factor)
+        ## Camera panel tracked tail line update
+        # We need slicing because we are preparing a bit longer shared array for segment position, just in case if
+        # we wanted to update #segments dynamically)
+        self.camera_panel.update_tracked_tail(self.current_segments[:, :self.param.n_segments+1], factor=factor)
 
+        ## Angle history plot update
         if any(self.angle_history[1, :] > 0):
-
-            # Angle panel update -- this feels kind of stupid (because we are sorting when only rolling is needed)
-            # but it works
-            sort_ind = np.argsort(-self.angle_history[1, :])[self.angle_history[1, :]>0]
-            self.angle_panel.set_data(self.angle_history[1,:][sort_ind]-np.max(self.angle_history[1,:]),
-                                      self.angle_history[0,:][sort_ind])
+            # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
+            # line connecting the head and tail
+            head_index = np.argmax(self.angle_history[1, :])
+            latest_t = self.angle_history[1, head_index]
+            rolled_data = np.roll(self.angle_history[:, self.angle_history[1,:]>0], -head_index-1, axis=1)
+            self.angle_panel.set_data(rolled_data[1, :]-latest_t, rolled_data[0, :])
 
             # Indicate frame rate
             valid_timestamps = self.angle_history[1, :][self.angle_history[1, :] > 0]
             self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(1 / np.median(np.diff(valid_timestamps))))
 
-    def update_parameters(self):
+    def refresh_param(self):
         """
         Called upon any user action on the ControlPanel or movements of the tail standard.
-        Read values from the GUI widgets, put them into the parameter (if valid), and put the new value into the GUI
-        Also rescale tail standard ROI, if we toggle show_raw or rescale image
+        Read values from the GUI widgets, put them into the parameter (if valid), and emit paramChanged signal.
+        The actual GUI refresh would be triggered by this signal (here I am trying to avoid directly calling
+        gui update methods from here but making them go through signals, for the sake of modularity).
         """
 
         # Read the current content of the GUI widgets
         new_sr, new_inv, new_iscale, new_fsize, new_cthresh = self.control_panel.return_current_value()
 
-        # Before overwriting the old parameters, check if we need to adjust the tail ROI and do so
+        # Before overwriting the old parameters, check if we need to adjust the tail ROI
         # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
         # (potentially resized) images, we need to adjust their scales every time we switch between showing raw vs.
-        # processed images or changing the resizing factor.
-        if new_sr and not self.parameters.show_raw: # if we switched from processed to raw
-            self.camera_panel.rescale_tail_standard(1 / self.parameters.image_scale)
-        if not new_sr and self.parameters.show_raw: # if we switched from raw to processed
-            self.camera_panel.rescale_tail_standard(self.parameters.image_scale)
-        if new_iscale!=self.parameters.image_scale and not self.parameters.show_raw: # if we changed the scale
-            self.camera_panel.rescale_tail_standard(new_iscale / self.parameters.image_scale)
+        # processed images or changing the resizing factor. We pass this tail_rescale_factor through the paramChanged
+        # signal argument to the camera_panel gui_refresh method.
+        tail_rescale_factor = 1.0
+        if new_sr and not self.param.show_raw: # if we switched from processed to raw
+            tail_rescale_factor = 1.0 / self.param.image_scale
+        if not new_sr and self.param.show_raw: # if we switched from raw to processed
+            tail_rescale_factor = self.param.image_scale
+        if new_iscale!=self.param.image_scale and not self.param.show_raw: # if we changed the scale
+            tail_rescale_factor = new_iscale / self.param.image_scale
+
+        # In the param object, we keep the tail standard positions in the rescaled image pixel coordinate
+        # We need to update these, if (a) the tail standard was moved from the GUI, (b) image scale was changed
+
+
+        # account for image scale change
+        tail_param_scale_factor = new_iscale / self.param.image_scale
+        # account for raw image visualization
+        if self.param.show_raw:
+            tail_param_scale_factor *= self.param.image_scale
+
+        base, tip = self.camera_panel.get_base_tip_position(tail_param_scale_factor)
+        self.param.base_x, self.param.base_y = base
+        self.param.tip_x, self.param.tip_y = tip
 
         # Insert the new values to the parameter object
-        self.parameters.show_raw = new_sr
-        self.parameters.color_invert = new_inv
-        self.parameters.image_scale = new_iscale
-        self.parameters.filter_size = int(new_fsize) # I think sliders return float?
-        self.parameters.clip_threshold = int(new_cthresh)
+        self.param.show_raw = new_sr
+        self.param.color_invert = new_inv
+        self.param.image_scale = new_iscale
+        self.param.filter_size = int(new_fsize) # I think sliders return float?
+        self.param.clip_threshold = int(new_cthresh)
 
-        # Also log tail standard position into parameter object, so we can easily pass them to the tracking process
-        factor = 1.0
-        if self.parameters.show_raw:
-            factor = self.parameters.image_scale
-        base, tip = self.camera_panel.get_base_tip_position(factor)
-        self.parameters.base_x, self.parameters.base_y = base
-        self.parameters.tip_x, self.parameters.tip_y = tip
-
-        # force new values on GUI (relevant for lineedits)
-        self.control_panel.set_current_value(self.parameters)
-
-        # flag level readjustment
-        self.camera_panel.level_adjust_flag = True
+        # Emit parameter change signal (will trigger GUI update)
+        self.param.paramChanged.emit(tail_rescale_factor)
 
         # Send parameter to the child process running the tracker through the queue
-        print('Put new parameters into the cue')
-        self.param_queue.put(self.parameters.__dict__)
-
-
+        self.param_queue.put(self.param.__dict__)
 
     """
     Methods called once at the end
@@ -289,7 +302,7 @@ class MiniZFTT(QMainWindow):
         This will be called when the main window is closed.
         Release resources for graceful exit.
         """
-        self.parameters.save_config_into_json() # save current config to the file
+        self.param.save_config_into_json() # save current config to the file
         self.camera.exit_acquisition_event.set() # ping the child process, exit acquisition while loop
         self.tracker.exit_acquisition_event.set()
         time.sleep(0.01) # Just to make sure that we see the end of acquisition loop before killing the process...
