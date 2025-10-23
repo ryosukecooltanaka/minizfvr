@@ -239,11 +239,10 @@ class MiniZFTT(QMainWindow):
             rolled_data = np.roll(self.angle_history[:, self.angle_history[1,:]>0], -head_index-1, axis=1)
             self.angle_panel.set_data(rolled_data[1, :]-latest_t, rolled_data[0, :])
 
-            # Indicate frame rate
-            frame_rate = 1.0 / np.median(np.diff(rolled_data[1,:]))
-            self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
-
-
+            # Indicate frame rate (average for 100 frames, because if we do this every frame it is to jitterly to read)
+            if rolled_data.shape[1] > 101:
+                frame_rate = 100/(latest_t - rolled_data[1, -101])
+                self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
 
     def refresh_param(self):
         """

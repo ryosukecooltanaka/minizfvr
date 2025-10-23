@@ -20,7 +20,9 @@ class StimulusApp:
     The constructor of this object will kickstart the GUI
     """
     def __init__(self, stimulus_generator, is_panorama=False):
+
         app = QApplication([])
+
         # check if we have multiple screens
         screens = app.screens()
         if len(screens) > 1: # if we have multiple screens, we show the stimulus window maximized at the last screen
@@ -120,7 +122,7 @@ class StimulusControlWindow(QMainWindow):
     def toggle_run_state(self):
         if not self.stimulus_running:
             self.stimulus_running = True
-            self.t0 = time.time()
+            self.t0 = time.perf_counter()
             self.ui.start_button.setText('Stop')
         else:
             self.stimulus_running = False
@@ -134,15 +136,20 @@ class StimulusControlWindow(QMainWindow):
         Called every timer update
         """
 
-        t_now = time.time()
+        t_now = time.perf_counter()
         self.dt = t_now - self.last_t
         self.last_t = t_now
 
         if self.receiver.conn is not None:
-            data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
-            if data is not None:
-                for this_data in data: # I think this is doing FIFO correctly?
-                    self.estimator.register_new_data(*this_data)
+            try:
+                data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
+                if data is not None:
+                    for this_data in data: # I think this is doing FIFO correctly?
+                        self.estimator.register_new_data(*this_data)
+            except EOFError:
+                # we reach here if we close the tracker GUI
+                print('Connection to tracker is lost!')
+                self.receiver.conn = None
 
         if self.stimulus_running:
 

@@ -55,7 +55,6 @@ class Estimator:
         # (typically 0.1 rad). Each swim bout is assigned a bout laterality, which is a (baseline-subtracted) mean
         # tail angle during the initial segment of the bout (typically 70 ms).
         if not self.in_bout and (self.vigor > vigor_threshold):
-            print('bout start')
             self.in_bout = True
             self.laterality_calc_pending = True
             self.bout_onset_t = last_t
@@ -72,7 +71,7 @@ class Estimator:
                                      (self.timestamp_buffer < (last_t - laterality_window))
                 in_laterality_window = self.timestamp_buffer > (last_t - laterality_window)
                 self.laterality = np.nanmean(self.angle_buffer[in_laterality_window]) - np.nanmean(self.angle_buffer[in_baseline_window])
-                print('laterality of this bout is ',self.laterality)
+                print('Bout (laterality = {:0.2f} deg)'.format(self.laterality/np.pi*180))
         else:
             self.laterality = 0
 

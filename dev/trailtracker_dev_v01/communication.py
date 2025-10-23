@@ -21,7 +21,7 @@ class Sender():
             self.conn = self.listener.accept()
             print('connected to listener through localhost port={}'.format(self.port))
             connected = True
-        except:
+        except ConnectionError:
             print('Connection attempt refused -- make sure there is a client')
 
         return connected
@@ -30,7 +30,7 @@ class Sender():
         if self.conn is not None:
             try:
                 self.conn.send(msg)
-            except:
+            except ConnectionError:
                 print('connection closed?')
 
 

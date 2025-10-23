@@ -58,6 +58,8 @@ class TrackerObject():
         self.initialize_shared_memory()
 
         # Crate the connection (open the port)
+        # I am hard-coding this here, as wrapping these things into an object and assigning this
+        # as an instance attribute caused weird behaviors
         listener = Listener(('localhost', 6000))
 
         # Do the tracking continuously
@@ -108,6 +110,7 @@ class TrackerObject():
                 self.shared_arrays['angle_history'][0, self.ii] = d_angle
                 self.shared_arrays['angle_history'][1, self.ii] = timestamp
                 self.ii = (self.ii + 1) % self.param['angle_trace_length']
+
             except Empty:
                 pass
 
@@ -147,5 +150,10 @@ class TrackerObject():
         """
 
         if self.conn is not None:
-            self.conn.send((timestamp, d_angle))
+            try:
+                self.conn.send((timestamp, d_angle))
+            except ConnectionError:
+                print('Connection to the stimulus program is aborted!')
+                self.conn = None
+
 
