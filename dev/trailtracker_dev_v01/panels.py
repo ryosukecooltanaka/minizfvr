@@ -1,7 +1,7 @@
 import numpy as np
 import pyqtgraph as pg
 from parameters import TailTrackerParams
-from utils import TypeForcedEdit
+from utils import TypeForcedEdit, bistateButton
 
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5.QtWidgets import (
@@ -53,7 +53,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     def get_base_tip_position(self, factor=1.0):
         """
         Return the current base and tip position of the tail standard (in image coordinate)
-        with factors, in case we are viewing the raw image while we opearate on scaled images
+        with factors, in case we are viewing the raw image while we operate on scaled images
         """
         base_x = self.tail_standard.getLocalHandlePositions(0)[1].x() * factor
         base_y = self.tail_standard.getLocalHandlePositions(0)[1].y() * factor
@@ -63,11 +63,10 @@ class CameraPanel(pg.GraphicsLayoutWidget):
 
     def refresh_gui(self, f):
         """
-        Refresh GUI (mostly the tail standard) -- triggered by parameter change
+        Refresh GUI (mostly the tail standard) -- This method is triggered by parameter change events.
         When switching between showing raw and scaled images,  keep the tail standard in the same relative position.
         Also flag frame contrast adjustment.
         """
-        print('[Camera panel] refresh requested with f = {}'.format(f))
         base, tip = self.get_base_tip_position()
         for h, pos in zip(self.tail_standard.handles, (base, tip)):
             newPos = QPointF(*[val * f for val in pos])
@@ -97,7 +96,6 @@ class AnglePanel(pg.GraphicsLayoutWidget):
         """ Data update method """
         self.angle_plot_data.setData(x, y)
 
-
 class ControlPanel(QWidget):
     """
     Hosts buttons, check boxes and such for experiment control
@@ -108,7 +106,7 @@ class ControlPanel(QWidget):
 
         # Prepare widgets that control the parameters
         # preprocessing parameters
-        self.connect_button = QPushButton('Connect') # attempt connection to the stimulus window
+        self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C') # attempt connection to the stimulus window
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
         self.image_scale_box = TypeForcedEdit(float) # subclassed to only allow specific numeric types
@@ -135,6 +133,7 @@ class ControlPanel(QWidget):
         # arrange preprocessing control widget into a grid layout
         grid = QGridLayout()
         self.connect_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+        self.connect_button.setMinimumWidth(100)
         grid.addWidget(self.connect_button,        0, 0, 2, 1)
         grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
         grid.addWidget(self.color_invert_checkbox, 1, 1, 1, 1)
@@ -146,6 +145,7 @@ class ControlPanel(QWidget):
         grid.addWidget(self.clip_threshold_slider, 1, 4, 1, 1)
 
         # Cosmetic size adjustment
+        self.connect_button.setStyleSheet('font: bold 14px;')
         self.image_scale_box.setMaximumWidth(50)
         grid.setColumnStretch(3, 2)
         grid.setColumnStretch(4, 2)
@@ -156,7 +156,6 @@ class ControlPanel(QWidget):
         """
         Given the TailTrackerParam object, set the values of the widgets
         """
-        print('[Control panel] refresh requested ')
         # Put the parameter received into the GUI
         self.show_raw_checkbox.setChecked(p.show_raw)
         self.color_invert_checkbox.setChecked(p.color_invert)
@@ -164,15 +163,9 @@ class ControlPanel(QWidget):
         self.filter_size_slider.setValue(p.filter_size)
         self.clip_threshold_slider.setValue(p.clip_threshold)
 
-
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\
                self.color_invert_checkbox.isChecked(),\
                self.image_scale_box.value(),\
                self.filter_size_slider.value(),\
                self.clip_threshold_slider.value()
-
-
-
-
-

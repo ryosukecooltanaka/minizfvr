@@ -3,9 +3,8 @@ import multiprocessing as mp
 from multiprocessing import shared_memory
 from multiprocessing.connection import Listener
 from queue import Empty
-from time import sleep
 from utils import preprocess_image, center_of_mass_based_tracking, encode_frame_to_array, decode_array_to_frame
-from communication import Sender
+
 
 class TrackerObject():
     """
@@ -29,7 +28,8 @@ class TrackerObject():
 
         # Event() object are boolean flags that can be accessed across processes
         self.exit_acquisition_event = mp.Event()  # this will be set true when the parent exits
-        self.connect_event = mp.Event() # this will be set when we press Connect button in the GUI
+        self.attempt_connection_event = mp.Event() # this will be set when we press Connect button in the GUI
+        self.connection_lost_event = mp.Event() # We will set this when we lost connection, which will be read by the GUI update method
 
         # Placeholders for shared memories -- will be initialized in the child process
         self.shared_memories = None
@@ -52,7 +52,7 @@ class TrackerObject():
         program through the named pipe.
         """
 
-        print('Start tracking process', flush=True)
+        print('[Tracker] Start tracking process', flush=True)
 
         # initialize shared memory
         self.initialize_shared_memory()
@@ -62,21 +62,30 @@ class TrackerObject():
         # as an instance attribute caused weird behaviors
         listener = Listener(('localhost', 6000))
 
+        # Initially there is no connection -- this will be used to update the connect button in the GUI
+        self.connection_lost_event.set()
+
         # Do the tracking continuously
         # We will exit this loop if we receive the flag from the main GUI
         while not self.exit_acquisition_event.is_set():
 
             # We try to open the connection when we click the connect button
-            if self.connect_event.is_set():
-                print('Connect event received by the tracker -- attempting to connect', flush=True)
-                self.conn = listener.accept()
-                self.connect_event.clear()
+            if self.attempt_connection_event.is_set() and self.conn is None:
+                print('[Tracker] Attempting connection! Note there is no timeout for this', flush=True)
+                try:
+                    self.conn = listener.accept()
+                    print('[Tracker] Connection to the stimulus program established', flush=True)
+                except ConnectionError:
+                    print('[Tracker] listner.accept() failed', flush=True)
+                    self.connection_lost_event.set()
+            self.attempt_connection_event.clear()
+
 
             # Check parameter queue for new parameters
             # We use try/catch as opposed to queue.empty(), because apparently the latter is not reliable
             try:
                 self.param = param_queue.get_nowait()
-                print('new parameter received', flush=True)
+                print('[Tracker] New parameter received from the queue', flush=True)
             except Empty:
                 pass
 
@@ -115,7 +124,7 @@ class TrackerObject():
                 pass
 
 
-        print('Exited tracking while loop!', flush=True)
+        print('[Tracker] Exited tracking while loop!', flush=True)
         [self.shared_memories[x].close() for x in self.shared_memories.keys()]
         if self.conn is not None:
             self.conn.close()
@@ -153,7 +162,8 @@ class TrackerObject():
             try:
                 self.conn.send((timestamp, d_angle))
             except ConnectionError:
-                print('Connection to the stimulus program is aborted!')
+                print('[Tracker] Connection to the stimulus program is lost!', flush=True)
                 self.conn = None
+                self.connection_lost_event.set()
 
 

@@ -1,4 +1,5 @@
 from multiprocessing.connection import Client, Listener
+from PyQt5.QtCore import QObject, pyqtSignal
 
 """
 To make sure that the sender and receiver share the same protocol,
@@ -7,10 +8,16 @@ same file and import them into tracker/stim app.
 
 """
 
+class Receiver(QObject):
+    """
+    This class wraps the named pipe Client (i.e. the receiving end of the pipe)
+    We also inherit QObject so it can let the upstream know when connection is lost
+    """
 
+    connectionLost = pyqtSignal()
 
-class Receiver():
     def __init__(self, port=6000):
+        super().__init__()
         self.port = port
         self.conn = None
         self.connected = False
@@ -26,19 +33,25 @@ class Receiver():
             self.connected = True
         except ConnectionRefusedError:
             print('Connection refused at localhost port ',self.port, 'Make sure to open the port by setting up a listener first')
+            self.connected = False
 
     def read_data(self):
         """
         If there is any data, flush everything, return as a list
         """
         if self.connected:
-            if self.conn.poll():
-                msg = []
-                while self.conn.poll():
-                    msg.append(self.conn.recv())
-                return msg
-            else:
-                return
+            try:
+                if self.conn.poll():
+                    msg = []
+                    while self.conn.poll():
+                        msg.append(self.conn.recv())
+                    return msg
+                else:
+                    return
+            except EOFError | ConnectionError:
+                print('[Receiver] Connection lost!')
+                self.connected = False
+                self.connectionLost.emit()
         else:
             return
 

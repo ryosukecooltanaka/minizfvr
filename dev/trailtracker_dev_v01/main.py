@@ -32,6 +32,8 @@ from PyQt5.QtWidgets import (
     QLabel
 )
 
+import qdarkstyle
+
 from utils import decode_array_to_frame
 from camera import SelectCameraByName
 from panels import CameraPanel, AnglePanel, ControlPanel
@@ -149,7 +151,7 @@ class MiniZFTT(QMainWindow):
     def arrange_widgets(self):
         """
         Separate out cosmetics out of the constructor for readability
-        Arrange widgets into a single container in the main window
+        Arrange panels into a single container in the main window
         """
         # set window title and size
         self.setWindowTitle("minizftt_dev v01")  # window title
@@ -193,15 +195,16 @@ class MiniZFTT(QMainWindow):
         self.param.paramChanged.connect(lambda f, p=self.param : self.control_panel.refresh_gui(p))
         self.param.paramChanged.connect(lambda f  : self.camera_panel.refresh_gui(f))
 
-        self.control_panel.connect_button.clicked.connect(self.tracker.connect_event.set)
-
+        # Connect button callback
+        self.control_panel.connect_button.clicked.connect(self.tracker.attempt_connection_event.set)
+        self.control_panel.connect_button.clicked.connect(lambda: self.control_panel.connect_button.force_state(True))
     """
     Methods called continuously during the run
     """
 
     def update_data_panels(self):
         """
-        Update Camera and Angle Panels
+        Update Camera and Angle Panels (and also some stuff in the control panel)
         This method will be called at like 20 Hz tops as the timer callback
         """
 
@@ -244,6 +247,11 @@ class MiniZFTT(QMainWindow):
                 frame_rate = 100/(latest_t - rolled_data[1, -101])
                 self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
 
+        ## Control panel -- connect button update
+        if self.tracker.connection_lost_event.is_set():
+            self.tracker.connection_lost_event.clear()
+            self.control_panel.connect_button.force_state(False)
+
     def refresh_param(self):
         """
         Called upon any user action on the ControlPanel or movements of the tail standard.
@@ -271,7 +279,6 @@ class MiniZFTT(QMainWindow):
         # In the param object, we keep the tail standard positions in the rescaled image pixel coordinate
         # We need to update these, if (a) the tail standard was moved from the GUI, (b) image scale was changed
 
-
         # account for image scale change
         tail_param_scale_factor = new_iscale / self.param.image_scale
         # account for raw image visualization
@@ -295,6 +302,7 @@ class MiniZFTT(QMainWindow):
         # Send parameter to the child process running the tracker through the queue
         self.param_queue.put(self.param.__dict__)
 
+
     """
     Methods called once at the end
     """
@@ -314,7 +322,7 @@ class MiniZFTT(QMainWindow):
         # close and unlink shared memories
         for attr in dir(self):
             if type(getattr(self, attr)) == shared_memory.SharedMemory:
-                print('closing shared memory',attr)
+                print('[MiniZFTT] closing shared memory',attr)
                 getattr(self, attr).close()
                 getattr(self, attr).unlink()
 
@@ -329,6 +337,7 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
     # Prepare the PyQt Application
     app = QApplication([])
+    app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
     # Instantiate the main GUI window
     win = MiniZFTT()
     # show the window

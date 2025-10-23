@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 from PyQt5.QtWidgets import (
     QLineEdit,
+    QPushButton
 )
 from numba import njit
 
@@ -167,3 +168,43 @@ class TypeForcedEdit(QLineEdit):
         Static method, so it will behave similarly to sliders etc.
         """
         return self.val
+
+class bistateButton(QPushButton):
+    """
+    Push button that flips state when clicked
+    """
+
+    def __init__(self, *args, t2='', c1='white', c2='red'):
+        super().__init__(*args)
+        self.t1 = self.text()
+        self.t2 = t2
+        self.activated = False
+        self.original_color = c1
+        self.activated_color = c2
+        self.user_defined_stylesheet = self.styleSheet()
+
+    def force_state(self, state):
+        """
+        Force true or false state
+        """
+        self.activated = state
+        if self.activated:
+            self.setText(self.t2)
+            self.setStyleSheet(self.user_defined_stylesheet + 'color: {};'.format(self.activated_color))
+        else:
+            self.setText(self.t1)
+            self.setStyleSheet(self.user_defined_stylesheet + 'color: {};'.format(self.original_color))
+
+    def switch_state(self):
+        """
+        Flip the state (convenient for callback)
+        """
+        self.force_state(not self.activated)
+
+    def setStyleSheet(self, sh):
+        """
+        I will keep style sheet as a str, because I don't want to keep appending
+        stuff every time I toggle the button state
+        """
+        super().setStyleSheet(sh)
+        self.user_defined_stylesheet = self.styleSheet()

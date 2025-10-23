@@ -17,7 +17,7 @@ class testStimulusGenerator:
         wavelength_mm = 10
 
         # threshold to prevent continuous drifting & "baseline gain" to convert rad to mm/s
-        self.y_displacement -= vigor * 30 * (vigor>0.1) * dt
+        self.y_displacement -= (vigor * 30 * (vigor>0.1) - 5) * dt
         self.phi_displacement -= laterality * 3
 
         linear_wave = np.cos((self.yy * h_mm + self.y_displacement) / wavelength_mm * 2.0 * np.pi)

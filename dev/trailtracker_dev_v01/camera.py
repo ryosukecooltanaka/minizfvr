@@ -65,7 +65,7 @@ class Camera():
                 encode_frame_to_array(frame, frame_array)
                 timestamp_queue.put(timestamp)
 
-        print('Exited continuous acquisition')
+        print('[Camera] Exited continuous acquisition')
         raw_frame_memory.close()
         self.close()
 

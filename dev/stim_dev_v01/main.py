@@ -8,6 +8,8 @@ from PyQt5.QtWidgets import (
     QMainWindow,
 )
 
+import qdarkstyle
+
 from parameters import StimParamObject
 from stim_window import StimulusWindow
 from panels import StimulusControlPanel
@@ -22,6 +24,7 @@ class StimulusApp:
     def __init__(self, stimulus_generator, is_panorama=False):
 
         app = QApplication([])
+        app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
 
         # check if we have multiple screens
         screens = app.screens()
@@ -62,8 +65,8 @@ class StimulusControlWindow(QMainWindow):
 
         # Call the parental (QMainWindow) constructor
         super().__init__()
-        self.setWindowTitle('Stimulus Control')
-        self.setGeometry(100, 100, 200, 400)
+        self.move(50, 50)
+        self.setFixedSize(200, 300)
 
         # Stimulus generator object
         # This should have a 'update' method, which takes timestamp, tail info, calibration parameters as inputs
@@ -110,8 +113,9 @@ class StimulusControlWindow(QMainWindow):
 
         # receiver
         self.receiver = Receiver()
-        self.receiver.open_connection() # unless a listener is already open, this fails -- in which case, click the connect button
-        self.ui.connect_button.clicked.connect(self.receiver.open_connection)
+        self.ui.connect_button.clicked.connect(self.toggle_connection)
+        self.receiver.connectionLost.connect(lambda: self.ui.connect_button.force_state(False))
+        self.toggle_connection() # attempt connection
 
         # Timed stimulus update
         self.timer = QTimer()
@@ -120,36 +124,43 @@ class StimulusControlWindow(QMainWindow):
         self.timer.start()
 
     def toggle_run_state(self):
-        if not self.stimulus_running:
-            self.stimulus_running = True
-            self.t0 = time.perf_counter()
-            self.ui.start_button.setText('Stop')
-        else:
-            self.stimulus_running = False
-            self.ui.start_button.setText('Start')
+        """
+        Start button callback
+        We do not stop the timer so that the stimulus_update method can flush the pipe continuously
+        """
+        self.stimulus_running = not self.stimulus_running
+        self.ui.start_button.force_state(self.stimulus_running)
+        self.t0 = time.perf_counter()
 
     def reset_stimulus(self):
+        """
+        Reset button callback (do I need this?)
+        """
         self.stimulus_window.show()
+
+    def toggle_connection(self):
+        """
+        Connect button callback
+        """
+        if not self.receiver.connected:
+            self.receiver.open_connection()
+        self.ui.connect_button.force_state(self.receiver.connected)
 
     def stimulus_update(self):
         """
-        Called every timer update
+        Called at every timer update
         """
 
+        # Calculate timestamp
         t_now = time.perf_counter()
         self.dt = t_now - self.last_t
         self.last_t = t_now
 
-        if self.receiver.conn is not None:
-            try:
-                data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
-                if data is not None:
-                    for this_data in data: # I think this is doing FIFO correctly?
-                        self.estimator.register_new_data(*this_data)
-            except EOFError:
-                # we reach here if we close the tracker GUI
-                print('Connection to tracker is lost!')
-                self.receiver.conn = None
+        if self.receiver.connected:
+            data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
+            if data is not None:
+                for this_data in data: # I think this is doing FIFO correctly?
+                    self.estimator.register_new_data(*this_data)
 
         if self.stimulus_running:
 

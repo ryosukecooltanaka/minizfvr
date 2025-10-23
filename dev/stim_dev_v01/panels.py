@@ -1,4 +1,4 @@
-from utils import TypeForcedEdit
+from utils import TypeForcedEdit, bistateButton
 import numpy as np
 from PyQt5.QtCore import Qt, QPointF, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -31,9 +31,9 @@ class StimulusControlPanel(QWidget):
         self.param = param
 
         # Buttons
-        self.start_button = QPushButton('Start')
+        self.start_button = bistateButton('Start', t2='Stop', c1='#FFF', c2='#E6C')
         self.reset_button = QPushButton('Reset')
-        self.connect_button = QPushButton('Connect')
+        self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C')
         self.calibrate_button = QPushButton('Calibrate')
         self.metadata_button = QPushButton('Metadata')
         buttons = (self.start_button, self.reset_button, self.connect_button, self.calibrate_button, self.metadata_button)
@@ -43,6 +43,7 @@ class StimulusControlPanel(QWidget):
         layout = QVBoxLayout()
         for button, hr in zip(buttons, height_ratio):
             button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
+            button.setStyleSheet('font: bold 14px;')
             layout.addWidget(button, hr)
         self.setLayout(layout)
 
