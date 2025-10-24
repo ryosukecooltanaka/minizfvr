@@ -36,15 +36,21 @@ class StimulusControlPanel(QWidget):
         self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C')
         self.calibrate_button = QPushButton('Calibrate')
         self.metadata_button = QPushButton('Metadata')
+        self.save_stim_check = QCheckBox('stim.')
+        self.save_tail_check = QCheckBox('tail')
         buttons = (self.start_button, self.reset_button, self.connect_button, self.calibrate_button, self.metadata_button)
-        height_ratio = (3,1,1,1,1)
 
         # make buttons stretchy & arrange
-        layout = QVBoxLayout()
-        for button, hr in zip(buttons, height_ratio):
+        layout = QGridLayout()
+        for button, i in zip(buttons, range(5)):
             button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
             button.setStyleSheet('font: bold 14px;')
-            layout.addWidget(button, hr)
+            layout.addWidget(button, i, 0, 1, 3)
+        layout.addWidget(QLabel('Save'), 5, 0, 1, 1)
+        layout.addWidget(self.save_stim_check, 5, 1, 1, 1)
+        layout.addWidget(self.save_tail_check, 5, 2, 1, 1)
+
+        layout.setRowMinimumHeight(0, 80)
         self.setLayout(layout)
 
         # prepare sub-panels (windows). Also pass the reference to the parameter object
@@ -210,7 +216,7 @@ class MetadataPanel(QWidget):
         self.genotype_box = QLineEdit()
         self.age_box = TypeForcedEdit(int)
         self.comment_box = QLineEdit()
-        self.comment_box.setMinimumWidth(300)
+
 
         boxes = (self.savepath_box, self.id_box, self.genotype_box, self.age_box, self.comment_box)
         box_names = ('path', 'id', 'genotype', 'age', 'comment')
@@ -219,7 +225,7 @@ class MetadataPanel(QWidget):
         layout = QGridLayout()
         for box, box_name, i in zip(boxes, box_names, range(5)):
             layout.addWidget(QLabel(box_name), i, 0)
-            layout.addWidget(box, i, 1)
+            layout.addWidget(box, i, 1, 1, 2)
             box.editingFinished.connect(self.refresh_param)
 
         self.setLayout(layout)
