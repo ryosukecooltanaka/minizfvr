@@ -84,8 +84,7 @@ class CalibrationPanel(QWidget):
     # which does paints and the CalibrationPanel are not in the direct parent-child relationship, to communicate
     # the state of CalibrationPanel, we send signals whenever the visibility of this panel changes, and we
     # connect them to a method that toggle the visibility of the frame. Signals are defined as class attributes.
-    panelOpened = pyqtSignal()
-    panelClosed = pyqtSignal()
+    panelOpenStateChanged = pyqtSignal(bool)
 
     def __init__(self, *args, param, **kwargs):
         super().__init__(*args, **kwargs)
@@ -186,11 +185,11 @@ class CalibrationPanel(QWidget):
 
     def showEvent(self, event):
         """ Let other parts of the program know that this panel opened """
-        self.panelOpened.emit()
+        self.panelOpenStateChanged.emit(True)
 
     def closeEvent(self, event):
         """ Let other parts of the program know that this panel opened """
-        self.panelClosed.emit()
+        self.panelOpenStateChanged.emit(False)
 
 
 class MetadataPanel(QWidget):

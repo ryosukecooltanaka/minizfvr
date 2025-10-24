@@ -63,65 +63,82 @@ class StimulusControlWindow(QMainWindow):
         The main window constructor. Called once at the beginning.
         """
 
-        # Call the parental (QMainWindow) constructor
+        ## Call the parental (QMainWindow) constructor
         super().__init__()
         self.move(50, 50)
         self.setFixedSize(200, 300)
 
-        # Stimulus generator object
+        ## Important state flags and timestamps
+        self.stimulus_running = False
+        self.save_flag = False
+        self.t0 = 0
+
+        ## Stimulus generator object
         # This should have a 'update' method, which takes timestamp, tail info, calibration parameters as inputs
-        # and return bitmap (ndarray) as an output. Otherwise it can be anything
+        # and return bitmap (ndarray) as an output. Otherwise, it can be anything
         self.stimulus_generator = stimulus_generator
 
         ## Create a parameter object & load config
         self.param = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
         self.param.load_config_from_json()
-        self.param.is_panorama = is_panorama
+        self.param.is_panorama = is_panorama # this param should be dictated by each stimulus generator
 
         ## Create an estimator object
         self.estimator = Estimator()
 
-        # state flags and timestamps
-        self.stimulus_running = False
-        self.t0 = 0
-        self.last_t = 0
-        self.dt = 0
-
-        ### Create Widgets ###
+        ## Create Widgets
         # create a stimulus window, pass null parent, and parameter reference
         self.stimulus_window = StimulusWindow(None, param=self.param, corner=stim_window_corner)
         if maximize_stim_window:
             self.stimulus_window.showMaximized()
         else:
             self.stimulus_window.show()
-
-        # prepare UI panels
+        # prepare UI panels and set it on the main window
         self.ui = StimulusControlPanel(self.param) # pass reference to parameters
         self.setCentralWidget(self.ui)
 
-        ### Connect Signals to Callbacks ###
-        # make sure the stimulus window paint area is updated appropriately as we change parameters
-        self.param.paramChanged.connect(self.stimulus_window.repaint)
-
-        # Start / stop stimulus as we click buttons
-        self.ui.start_button.clicked.connect(self.toggle_run_state)
-        self.ui.reset_button.clicked.connect(self.reset_stimulus)
-
-        # Toggle calibration frame depending on the calibration panel state
-        self.ui.calibration_panel.panelOpened.connect(lambda: self.stimulus_window.toggle_calibration_frame(True))
-        self.ui.calibration_panel.panelClosed.connect(lambda: self.stimulus_window.toggle_calibration_frame(False))
-
-        # receiver
+        ## Prepare a receiver object to listen to the tail tracking data & attempt the connection
         self.receiver = Receiver()
-        self.ui.connect_button.clicked.connect(self.toggle_connection)
-        self.receiver.connectionLost.connect(lambda: self.ui.connect_button.force_state(False))
-        self.toggle_connection() # attempt connection
 
-        # Timed stimulus update
+        ## Create and start the timer for timed GUI updates
         self.timer = QTimer()
         self.timer.setInterval(1000 // 60) # aim 60 Hz
-        self.timer.timeout.connect(self.stimulus_update)
         self.timer.start()
+
+        ## Connect signals to callbacks
+        self.connect_callbacks()
+
+        ## Attempt connection
+        self.receiver.open_connection()
+
+    def connect_callbacks(self):
+        """
+        Connect various signals to callbacks
+        Only run once from the constractor
+        Separated out as a method for the sake of readability
+        """
+
+        # When parameter is changed, we immediately repaint stimuli,
+        # which is especially important for adjusting the paint area interactively
+        self.param.paramChanged.connect(self.stimulus_window.repaint)
+
+        # Start / stop stimulus as we click the start button
+        self.ui.start_button.clicked.connect(self.toggle_run_state)
+
+        # Reset stimulus as we click the reset button
+        self.ui.reset_button.clicked.connect(self.reset_stimulus)
+
+        # When you open/close the calibration panel, show/un-show the calibration frame around the paint area
+        self.ui.calibration_panel.panelOpenStateChanged.connect(
+            lambda x: self.stimulus_window.toggle_calibration_frame(x))
+
+        # If you click the connect button, the receiver will attempt connection
+        self.ui.connect_button.clicked.connect(self.receiver.open_connection)
+        # If connection state is changed, we update the button
+        self.receiver.connectionStateChanged.connect(lambda x: self.ui.connect_button.force_state(x))
+
+        # Schedule regular stimulus update
+        self.timer.timeout.connect(self.stimulus_update)
 
     def toggle_run_state(self):
         """
@@ -137,24 +154,12 @@ class StimulusControlWindow(QMainWindow):
         Reset button callback (do I need this?)
         """
         self.stimulus_window.show()
-
-    def toggle_connection(self):
-        """
-        Connect button callback
-        """
-        if not self.receiver.connected:
-            self.receiver.open_connection()
-        self.ui.connect_button.force_state(self.receiver.connected)
+        self.t0 = time.perf_counter()
 
     def stimulus_update(self):
         """
         Called at every timer update
         """
-
-        # Calculate timestamp
-        t_now = time.perf_counter()
-        self.dt = t_now - self.last_t
-        self.last_t = t_now
 
         if self.receiver.connected:
             data = self.receiver.read_data() # list of (tail angle, timestamp) tuples
@@ -164,24 +169,20 @@ class StimulusControlWindow(QMainWindow):
 
         if self.stimulus_running:
 
+            t_now = time.perf_counter() - self.t0
             # give the time stamp to the stimulus generator object, get the frame bitmap
-            if not self.param.is_panorama:
-                stim_frame = self.stimulus_generator.update(
-                    dt=self.dt,
-                    paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm),
-                    vigor=self.estimator.vigor,
-                    laterality=self.estimator.laterality
-                )
-            else:
-                # when we are working on a panoramic setup, the desired scale of stimuli should be
-                # determined by the geometry of the physical setup itself. Such that, the stimulus
-                # generator should be OK remaining agnostic about
-                stim_frame = self.stimulus_generator.update(t=t)
+
+            stim_frame = self.stimulus_generator.update(
+                t=t_now,
+                paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm),
+                vigor=self.estimator.vigor,
+                laterality=self.estimator.laterality
+            )
 
             # if the shape of the bitmap has changed, we call parameter refresh, in case if we need to change the rect
             if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
                 self.param.bitmap_h, self.param.bitmap_w = stim_frame.shape[:2]
-                self.ui.calibration_panel.refresh_param()
+                self.param.paramChanged.emit()
 
             # pass the frame bitmap to the StimulusWindow, and paint
             self.stimulus_window.receive_and_paint_new_frame(stim_frame)

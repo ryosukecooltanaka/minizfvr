@@ -99,3 +99,4 @@ class StimulusWindow(QWidget):
         """ As we open/close the calibration panel (under ui),
         toggle the calibration frame around the paint area """
         self.show_calibration_frame = state
+        self.repaint()

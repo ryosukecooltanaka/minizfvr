@@ -14,7 +14,7 @@ class Receiver(QObject):
     We also inherit QObject so it can let the upstream know when connection is lost
     """
 
-    connectionLost = pyqtSignal()
+    connectionStateChanged = pyqtSignal(bool) # True for connection opened, false for lost
 
     def __init__(self, port=6000):
         super().__init__()
@@ -27,13 +27,17 @@ class Receiver(QObject):
         To open a client connected to the port needs to be first opened from the sender side.
         We call this method at the start-up once, and also from the connect button
         """
-        try:
-            self.conn = Client(('localhost', self.port))
-            print('Client opened at localhost port', self.port)
-            self.connected = True
-        except ConnectionRefusedError:
-            print('Connection refused at localhost port ',self.port, 'Make sure to open the port by setting up a listener first')
-            self.connected = False
+        if not self.connected:
+            try:
+                self.conn = Client(('localhost', self.port))
+                print('Client opened at localhost port', self.port)
+                self.connected = True
+                self.connectionStateChanged.emit(True)
+
+            except ConnectionRefusedError:
+                print('Connection refused at localhost port ',self.port, 'Make sure to open the port by setting up a listener first')
+                self.connected = False
+
 
     def read_data(self):
         """
@@ -48,10 +52,11 @@ class Receiver(QObject):
                     return msg
                 else:
                     return
-            except EOFError | ConnectionError:
+            except (EOFError, ConnectionError) as e:
                 print('[Receiver] Connection lost!')
                 self.connected = False
-                self.connectionLost.emit()
+                self.connectionStateChanged.emit(False)
+
         else:
             return
 
