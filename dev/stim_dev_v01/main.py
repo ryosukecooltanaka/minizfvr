@@ -191,7 +191,7 @@ class StimulusControlWindow(QMainWindow):
         """
 
         # If we are connected to the tail tracker, we get the tail angle data / timestamp from the pipe,
-        # pass it to the estimator object, and calculate the latest vigor and laterality information.
+        # pass it to the estimator object, and calculate the latest vigor and bias information.
         # We do this continuously regardless of whether the stimuli are running, so we do not accumulate
         # data in the pipe.
         if self.receiver.connected:
@@ -208,12 +208,17 @@ class StimulusControlWindow(QMainWindow):
 
             t_now = time.perf_counter() - self.t0
 
+            # update the swim estimate -- this needs to happen at the same rate as the stimulus (rather than with the
+            # tail data entry). This is because bout bias is detected as delta-like point event, and if we calcualte
+            # this at 200Hz the stimulus can miss it
+            self.estimator.update_swim_estimate()
+
             # give the time stamp to the stimulus generator object, get the frame bitmap
             stim_frame = self.stimulus_generator.update(
                 t=t_now,
                 paint_area_mm=(self.param.w/self.param.px_per_mm, self.param.h/self.param.px_per_mm),
                 vigor=self.estimator.vigor,
-                laterality=self.estimator.laterality
+                bias=self.estimator.bias
             )
 
             # In case the size of the bitmap is different from what is in the parameter (which would be

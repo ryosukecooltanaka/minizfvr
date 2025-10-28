@@ -1,0 +1,20 @@
+{
+    "is_panorama": false,
+    "x": 46,
+    "y": 56,
+    "w": 510,
+    "h": 510,
+    "pw": 300,
+    "ph": 300,
+    "ppad": 30,
+    "physical_w": 118,
+    "px_per_mm": 4.310344827586207,
+    "bitmap_w": 100,
+    "bitmap_h": 100,
+    "force_equal_ratio": true,
+    "save_path": "./saving_test",
+    "animal_id": 1,
+    "animal_genotype": "WT",
+    "animal_age": 1238918,
+    "animal_comment": "adaufuisahdfaasdfas"
+}

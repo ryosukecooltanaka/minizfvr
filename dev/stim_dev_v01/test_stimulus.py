@@ -13,19 +13,19 @@ class testStimulusGenerator(stimulusGenerator):
         self.y_displacement = 0.0
         self.phi_displacement = 0.0
         self.vigor = 0.0
-        self.laterality = 0.0
+        self.bias = 0.0
 
         self.variables_to_save.extend(
             [
                 'y_displacement',
                 'phi_displacement',
                 'vigor',
-                'laterality'
+                'bias'
             ]
         )
         self.last_t = 0
 
-    def draw_frame(self, t, paint_area_mm, vigor, laterality):
+    def draw_frame(self, t, paint_area_mm, vigor, bias):
         """
         Receive timestamp, scale info, and closed loop information from the main app
         Return the stimulus frame
@@ -35,14 +35,14 @@ class testStimulusGenerator(stimulusGenerator):
         self.last_t = t
 
         self.vigor = vigor
-        self.laterality = laterality
+        self.bias = bias
 
         w_mm, h_mm = paint_area_mm
         wavelength_mm = 10
 
         # threshold to prevent continuous drifting & "baseline gain" to convert rad to mm/s
         self.y_displacement -= (vigor * 30 * (vigor>0.1) - 5) * dt
-        self.phi_displacement -= laterality * 3
+        self.phi_displacement -= bias * 3
 
         linear_wave = np.cos((self.yy * h_mm + self.y_displacement) / wavelength_mm * 2.0 * np.pi)
         axial_wave = np.cos((self.phi + self.phi_displacement) * 16)
