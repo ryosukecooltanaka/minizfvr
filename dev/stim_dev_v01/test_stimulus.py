@@ -15,7 +15,6 @@ class stimulusGenerator(QObject):
 
     def __init__(self):
         super().__init__()
-        self.stim_state = dict()
         self.duration = 10
 
     def update(self, t, *args, **kwargs):
