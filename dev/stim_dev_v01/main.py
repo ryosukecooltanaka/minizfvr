@@ -165,8 +165,7 @@ class StimulusControlWindow(QMainWindow):
             # prepare saving files (if necessary)
             self.saver.initialize(
                 self.param,
-                self.stimulus_generator.duration,
-                self.stimulus_generator.stim_dict
+                self.stimulus_generator
             )
 
             print('Starting stimulus')
@@ -233,7 +232,7 @@ class StimulusControlWindow(QMainWindow):
                         for this_data in data:
                             self.saver.save_tail_data(this_data[0]-self.t0_tail, this_data[1])
                 if self.saver.save_stim_flag:
-                    self.saver.save_stim_data(t_now, self.stimulus_generator.stim_dict)
+                    self.saver.save_stim_data(t_now, self.stimulus_generator)
 
             # pass the frame bitmap to the StimulusWindow, and paint
             self.stimulus_window.receive_and_paint_new_frame(stim_frame)

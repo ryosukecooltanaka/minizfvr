@@ -4,6 +4,9 @@ import os
 from pathlib import Path
 from PyQt5.QtCore import Qt
 from parameters import StimParamObject
+from stimulus_generator import stimulusGenerator
+
+# todo: saving datapoint by datapoint is slow -- do chuncked saving
 
 class Saver:
     """
@@ -35,7 +38,7 @@ class Saver:
         else:
             self.save_stim_flag = (new_state == Qt.Checked)
 
-    def initialize(self, param: StimParamObject, duration, stim_dict):
+    def initialize(self, param: StimParamObject, sgen: stimulusGenerator):
         """
         This will be called every time you start stimulus
         If necessary, create a directory for this fish, create a directory for this run,
@@ -62,7 +65,7 @@ class Saver:
         ## Prepare tail save file
         if self.save_tail_flag:
             # we expect this to be at most 300 Hz
-            expected_frame_count = int(duration * 300)
+            expected_frame_count = int(sgen.duration * 300)
             self.tail_file = h5py.File(run_path / 'tail_log.h5', 'w')
             self.tail_file.create_dataset('t', (expected_frame_count,), dtype=float)
             self.tail_file.create_dataset('tail_angle', (expected_frame_count,), dtype=float)
@@ -72,14 +75,17 @@ class Saver:
         if self.save_stim_flag:
             # We need to specify the size of the dataset
             # Our actual frame rate would be slightly higher than 60 Hz due to rounding
-            expected_frame_count = int(duration * 65)
+            expected_frame_count = int(sgen.duration * 65)
             # open a handle for the file
             self.stim_file = h5py.File(run_path / 'stimulus_log.h5', 'w')
             # create dataset corresponding to the stimulus dict (and timestamps)
             self.stim_file.create_dataset('t',  (expected_frame_count, ), dtype=float)
-            for key in stim_dict.keys():
-                self.stim_file.create_dataset(key, (expected_frame_count, ), dtype=type(stim_dict[key]))
+            for var in sgen.variables_to_save:
+                self.stim_file.create_dataset(var, (expected_frame_count, ), dtype=type(getattr(sgen, var)))
             self.stim_index = 0
+
+        ## save parameter
+        param.save_config_into_json(run_path / 'config.json')
 
         print('Initialized saving files for {} run {}'.format(fish_name, run_name))
 
@@ -114,15 +120,13 @@ class Saver:
         self.tail_file['tail_angle'][self.tail_index] = tail_angle
         self.tail_index += 1
 
-    def save_stim_data(self, t, stim_dict: dict):
+    def save_stim_data(self, t, sgen: stimulusGenerator):
         """
         Save the latest stimulus state
-        stim_dict is expected to have the same keys as the stim_file (this should be true unless you do
-        something whacky in the stimulus generator) except for t (for timestamp)
         """
         self.stim_file['t'][self.stim_index] = t
-        for key in stim_dict:
-            self.stim_file[key][self.stim_index] = stim_dict[key]
+        for var in sgen.variables_to_save:
+            self.stim_file[var][self.stim_index] = getattr(sgen, var)
         self.stim_index += 1
 
 
