@@ -185,7 +185,7 @@ class CalibrationPanel(QWidget):
             if not self.param.force_equal_ratio:
                 self.param.ph = self.h_box.value()
             else:
-                self.param.ph = np.round(self.w_box.value() * self.param.bitmap_h / self.param.bitmap_w)
+                self.param.ph = int(np.round(self.w_box.value() * self.param.bitmap_h / self.param.bitmap_w))
 
             self.param.ppad = self.pad_box.value()
 

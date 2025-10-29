@@ -29,7 +29,8 @@ class BaseParams:
     def read_param_from_dict(self, param_dict, verbose=False):
         for key in param_dict.keys():
             if hasattr(self, key):  # so we don't inject weird attributes
-                setattr(self, key, param_dict[key])
+                current_type = type(getattr(self, key))
+                setattr(self, key, current_type(param_dict[key]))
                 if verbose:
                     print('loaded', key, '=', param_dict[key])
             else:

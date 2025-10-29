@@ -229,8 +229,12 @@ class StimulusControlWindow(QMainWindow):
             # usually only the case during the first frame, we insert new bitmap sizes into the parameter.
             # This will only affect what is being shown if we are forcing the equal ratio and the aspect
             # ratio of the bitmap changes. I assume this is a very rare event.
-            if (self.param.bitmap_h, self.param.bitmap_w) != stim_frame.shape[:2]: # can be 3d!
-                self.param.bitmap_h, self.param.bitmap_w = stim_frame.shape[:2]
+            if self.param.is_panorama:
+                current_bitmap_shape = stim_frame[0].shape[:2]
+            else:
+                current_bitmap_shape = stim_frame.shape[:2]
+            if (self.param.bitmap_h, self.param.bitmap_w) != current_bitmap_shape: # can be 3d!
+                self.param.bitmap_h, self.param.bitmap_w = current_bitmap_shape
                 self.ui.calibration_panel.refresh_param()
 
             ## saving - we check stimulus_running again, because stimulus_generator can stop the stimulus and
