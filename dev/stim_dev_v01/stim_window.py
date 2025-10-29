@@ -134,6 +134,9 @@ class StimulusWindow(QWidget):
             for this_transform in transforms:
                 qp.setTransform(this_transform)
                 qp.drawRect(rect)
+                # center lines would be still useful for the panorama alignment too?
+                qp.drawLine(QLine(0, self.param.ph // 2, self.param.pw, self.param.ph // 2))
+                qp.drawLine(QLine(self.param.pw // 2, 0, self.param.pw // 2, self.param.ph))
 
 
     def receive_and_paint_new_frame(self, frame):
