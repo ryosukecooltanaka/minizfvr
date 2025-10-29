@@ -94,7 +94,7 @@ class StimulusControlWindow(QMainWindow):
         self.estimator = Estimator() # todo: pass parameters?
 
         ## Create a saver object that handles data saving
-        self.saver = Saver()
+        self.saver = Saver(buffer_size=self.param.save_buffer_size)
 
         ## Create Widgets
         # create a stimulus window, pass null parent, and parameter reference

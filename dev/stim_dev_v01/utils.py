@@ -159,6 +159,18 @@ class bistateButton(QPushButton):
         self.user_defined_stylesheet = self.styleSheet()
 
 
+def sync_buffer_to_file(file, buffer, last_sample_index, buffer_size):
+    """
+    Copy last n_sample datapoints from buffer (dict of arrays) to file (h5py.File with Datasets matching the buffer)
+    """
+    n_sample = last_sample_index % buffer_size
+    # if the last_sample_index is cleanly divided by the buffer size and we are calling this function, it means
+    # that the entire buffer is the new, un-saved data
+    if n_sample == 0:
+        n_sample = buffer_size
+    for var in buffer.keys():
+        file[var][(last_sample_index-n_sample):last_sample_index] = buffer[var][:n_sample]
+
 
 
 

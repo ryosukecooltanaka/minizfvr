@@ -63,6 +63,7 @@ class StimulusAppParams(BaseParams):
 
     # saving related
     save_path: str = './'
+    save_buffer_size: int = 500
 
     # animal metadata
     animal_id: int = 0
