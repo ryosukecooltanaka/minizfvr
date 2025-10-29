@@ -69,11 +69,12 @@ class StimulusControlWindow(QMainWindow):
 
         ## Call the parental (QMainWindow) constructor
         super().__init__()
-        self.move(50, 50)
+        self.move(350, 50)
         self.setFixedSize(200, 300)
 
         ## State flags, handles, and timestamps
         self.stimulus_running = False
+        self.ii = 0 # count frames from the parent, just for convenience
         self.t0 = 0
         self.t0_tail = None # save the first tail timestamp
 
@@ -110,7 +111,7 @@ class StimulusControlWindow(QMainWindow):
 
         ## Create and start the timer for timed GUI updates
         self.timer = QTimer()
-        self.timer.setInterval(1000 // 60) # aim 60 Hz
+        self.timer.setInterval(1000 // self.param.frame_rate) # aim 60 Hz
         self.timer.start()
 
         ## Connect signals to callbacks
@@ -190,6 +191,9 @@ class StimulusControlWindow(QMainWindow):
         Called at every timer update
         """
 
+        # timestamp to monitor the computational time for stimulus update
+        t_this_loop_start = time.perf_counter()
+
         # If we are connected to the tail tracker, we get the tail angle data / timestamp from the pipe,
         # pass it to the estimator object, and calculate the latest vigor and bias information.
         # We do this continuously regardless of whether the stimuli are running, so we do not accumulate
@@ -241,6 +245,15 @@ class StimulusControlWindow(QMainWindow):
 
             # pass the frame bitmap to the StimulusWindow, and paint
             self.stimulus_window.receive_and_paint_new_frame(stim_frame)
+
+            # show how much time it takes to do the single stimulus update
+            if self.ii % 50 == 0:
+                self.ui.message_line.setText('Set rate {0:}Hz / Duty {1:0.1%}'.format(
+                    self.param.frame_rate,
+                    (time.perf_counter() - t_this_loop_start)/self.timer.interval()*1000)
+                )
+                self.ii = 0
+            self.ii += 1
 
     def closeEvent(self, event):
         self.stimulus_window.close()

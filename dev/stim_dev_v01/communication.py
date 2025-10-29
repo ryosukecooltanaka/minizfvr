@@ -38,7 +38,6 @@ class Receiver(QObject):
                 print('Connection refused at localhost port ',self.port, 'Make sure to open the port by setting up a listener first')
                 self.connected = False
 
-
     def read_data(self):
         """
         If there is any data, flush everything, return as a list

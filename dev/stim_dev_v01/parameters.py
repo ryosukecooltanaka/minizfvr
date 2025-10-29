@@ -61,6 +61,9 @@ class StimulusAppParams(BaseParams):
     bitmap_h: int = 0
     force_equal_ratio: bool = False
 
+    # desired frame rate
+    frame_rate: int = 60
+
     # saving related
     save_path: str = './'
     save_buffer_size: int = 500

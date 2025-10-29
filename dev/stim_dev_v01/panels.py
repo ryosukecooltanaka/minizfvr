@@ -38,6 +38,7 @@ class StimulusControlPanel(QWidget):
         self.metadata_button = QPushButton('Metadata')
         self.save_stim_check = QCheckBox('stim.')
         self.save_tail_check = QCheckBox('tail')
+        self.message_line = QLabel('')
         buttons = (self.start_button, self.reset_button, self.connect_button, self.calibrate_button, self.metadata_button)
 
         # make buttons stretchy & arrange
@@ -49,6 +50,7 @@ class StimulusControlPanel(QWidget):
         layout.addWidget(QLabel('Save'), 5, 0, 1, 1)
         layout.addWidget(self.save_stim_check, 5, 1, 1, 1)
         layout.addWidget(self.save_tail_check, 5, 2, 1, 1)
+        layout.addWidget(self.message_line, 6, 0, 1, 3)
 
         layout.setRowMinimumHeight(0, 80)
         self.setLayout(layout)
