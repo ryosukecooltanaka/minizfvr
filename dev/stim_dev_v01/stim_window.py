@@ -127,16 +127,29 @@ class StimulusWindow(QWidget):
 
         # calibration frame
         if self.show_calibration_frame:
-            qp.setBrush(Qt.NoBrush)
+            # No fill, thick pink lines for calibration
             thick_pen = QPen(QColor(255, 0, 127))
             thick_pen.setWidth(3)
+            qp.setBrush(Qt.NoBrush)
             qp.setPen(thick_pen)
             for this_transform in transforms:
+                # paint frames
                 qp.setTransform(this_transform)
                 qp.drawRect(rect)
-                # center lines would be still useful for the panorama alignment too?
+                # paint center lines
                 qp.drawLine(QLine(0, self.param.ph // 2, self.param.pw, self.param.ph // 2))
                 qp.drawLine(QLine(self.param.pw // 2, 0, self.param.pw // 2, self.param.ph))
+
+            # also draw letters on the screen
+            font = qp.font()
+            font.setPixelSize(min(self.param.ph, self.param.pw))
+            qp.setFont(font)
+            colors = ((255, 30, 30), (30, 255, 30), (30, 30, 255))
+            for this_transform, screen_name, color in zip(transforms, ('L', 'F', 'R'), colors):
+                qp.setTransform(this_transform)
+                qp.setPen(QPen(QColor(*color)))
+                qp.drawText(rect, Qt.AlignCenter, screen_name)
+
 
 
     def receive_and_paint_new_frame(self, frame):
