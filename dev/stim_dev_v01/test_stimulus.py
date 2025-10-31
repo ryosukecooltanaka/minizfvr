@@ -1,8 +1,8 @@
 from main import StimulusApp
 import numpy as np
-from stimulus_generator import stimulusGenerator
+from stimulus_generator import StimulusGenerator
 
-class testStimulusGenerator(stimulusGenerator):
+class TestStim(StimulusGenerator):
     def __init__(self):
         super().__init__()
         self.xx, self.yy = np.meshgrid(np.linspace(-0.5, 0.5, 100), np.linspace(-0.5, 0.5, 100))
@@ -53,7 +53,7 @@ class testStimulusGenerator(stimulusGenerator):
 
 
 if __name__ == "__main__":
-    stimulus_generator = testStimulusGenerator()
+    stimulus_generator = TestStim()
     StimulusApp(stimulus_generator, is_panorama=False)
 
 

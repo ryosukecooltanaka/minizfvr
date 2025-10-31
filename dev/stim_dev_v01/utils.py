@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QWheelEvent
+import re
 
 class TypeForcedEdit(QLineEdit):
     """
@@ -173,7 +174,28 @@ def sync_buffer_to_file(file, buffer, last_sample_index, buffer_size):
 
 
 
+def parse_glsl(text, qualifier):
+    """
+    To make shader inputs a bit more accessible, we parse glsl code to find variables with a specified qualifier
+    """
+    out = []
+    # parse lines with line break and semicolons
+    lines = re.split('\n|;', text)
+    for line in lines:
+        # parse words by space
+        words = re.split('\s', line)
+        if words[0] == qualifier:
+            # Unless something wacky happening, the second argument is the variable type and the third the name.
+            # With an assumption that we are never going to pass matrices as inputs, I look for numbers in the
+            # type name (like vec2 or vec3), and count up these numbers to derive the shape of inputs.
+            temp = re.search('[0-9]+', words[1])
+            if temp is None:
+                var_length = 1
+            else:
+                var_length = int(temp.group())
 
+            out.append((words[2], var_length))
+    return out
 
 
 

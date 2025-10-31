@@ -1,7 +1,7 @@
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
 
-class stimulusGenerator(QObject):
+class StimulusGenerator(QObject):
     """
     This is a template for the stimulus generator.
     At the minimum, stimulus generators should have the following attributes
