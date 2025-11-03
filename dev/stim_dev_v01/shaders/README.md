@@ -11,8 +11,6 @@ There are three transformations to be taken care of, which are
 
 Because the model transformation is somewhat trivial (it is just vanila translation/rotation/scaling), my focus will be on the **viewing transformation** and **perspective projection**.
 
-For writing this, I primarily relied on Japanese sources (like notes by game devs) which I found more useful than course slides in random US colleges (which is what shows up if you google these topics in English).
-
 **Source materials:**
 [Qiita article by @ryutorin](https://qiita.com/ryutorion/items/0824a8d6f27564e850c9) /
 [CS lecture note from U Tsukuba by Prof. Kanamori](https://kanamori.cs.tsukuba.ac.jp/lecture/old2017/cg_basics/03/03_slides.pdf) /
