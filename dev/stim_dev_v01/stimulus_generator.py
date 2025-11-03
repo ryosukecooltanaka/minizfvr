@@ -17,8 +17,6 @@ class StimulusGenerator(QObject):
         self.variables_to_save = []
         self.duration = 10
 
-
-
     def update(self, t, *args, **kwargs):
         """
         update() method is called at regular interval by the timer callback of the main app.
@@ -34,3 +32,8 @@ class StimulusGenerator(QObject):
         """
         pass
 
+    def close(self):
+        """
+        In case you need to close handles for some externals, do it so here
+        """
+        pass

@@ -126,7 +126,7 @@ class SceneEngine:
     def add_object(self, shader, vertices, texture_buffer=None):
         self.objects.append(VirtualObject(shader, vertices, texture_buffer))
 
-    def set_global_uniform(self, key, val):
+    def set_uniform(self, key, val):
         """
         Enforce a globally shared value for a certain uniform variable
         Use this for camera parameters etc. that should be consistent across shaders/objects
@@ -156,6 +156,9 @@ class WrappedShader:
     variables)
     """
     def __init__(self, ctx, shader_path, primitive_type):
+        """
+        WrappedShader object should always be created by the add_shader() method of a SceneEngine() object
+        """
         self.ctx = ctx
         # We use this flag for rendering a VAO
         self.primitive_type = primitive_type
@@ -167,7 +170,7 @@ class WrappedShader:
         # Parse glsl source code and log expected input name and size
         # The list of names are useful, because we need that to create VAO from VBO+shader
         self.input_keys = [x[0] for x in parse_glsl(vsh, 'in')] # list of (string, int) tuples
-        self.input_total_width = np.sum([x[1] for x in self.input_keys]) # this is the number of dimensions each vertex is supposed to have
+        self.input_total_width = np.sum([x[1] for x in parse_glsl(vsh, 'in')]) # this is the number of dimensions each vertex is supposed to have
 
         # Also get the list of Uniform (which is like the shader parameters) by parsing GLSL
         # Uniforms are variables that can be set from CPU and the same value are shared across all GPU processors
@@ -224,7 +227,7 @@ class VirtualObject:
         # model translation and rotation, it makes sense for VirtualObject to keep these values as its own attributes
         # and enforce these values onto the shader program before each render call (although Uniform is also used
         # for global purposes such as camera directions etc.). To render dynamic scenes, one should update the values
-        # in this uniform_dict under the each VirtualObject within a SceneEngine.
+        # in this uniform_dict under each VirtualObject within a SceneEngine.
         self.uniform_dict = {}
         for key_len_pair in self.shader.uniforms:
             # we are being loose about the actual value type here because as long as you feed ndarray it is nicely

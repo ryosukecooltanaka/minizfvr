@@ -260,6 +260,7 @@ class StimulusControlWindow(QMainWindow):
             self.ii += 1
 
     def closeEvent(self, event):
+        self.stimulus_generator.close()
         self.stimulus_window.close()
         self.receiver.close()
         self.param.save_config_into_json()

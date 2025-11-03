@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from PyQt5.QtCore import Qt
 from parameters import StimParamObject
-from stimulus_generator import stimulusGenerator
+from stimulus_generator import StimulusGenerator
 from utils import sync_buffer_to_file
 
 # todo: saving datapoint by datapoint is slow -- do chuncked saving
@@ -46,7 +46,7 @@ class Saver:
         else:
             self.save_stim_flag = (new_state == Qt.Checked)
 
-    def initialize(self, param: StimParamObject, sgen: stimulusGenerator):
+    def initialize(self, param: StimParamObject, sgen: StimulusGenerator):
         """
         This will be called every time you start stimulus
         If necessary, create a directory for this fish, create a directory for this run,
@@ -151,7 +151,7 @@ class Saver:
         if (self.tail_index % self.buffer_size)==0:
             sync_buffer_to_file(self.tail_file, self.tail_buffer, self.tail_index, self.buffer_size)
 
-    def save_stim_data(self, t, sgen: stimulusGenerator):
+    def save_stim_data(self, t, sgen: StimulusGenerator):
         """
         Load the latest stimulus state into the buffer, and save if necessary
         """
