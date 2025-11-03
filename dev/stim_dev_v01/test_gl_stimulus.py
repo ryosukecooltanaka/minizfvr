@@ -27,6 +27,7 @@ class TestGLStim(StimulusGenerator):
         Receive timestamp, scale info, and closed loop information from the main app
         Return the stimulus frame
         """
+        self.se.set_uniform('wriggle', (np.sin(t*8)*0.1, np.cos(t*8)*0.1))
         self.se.set_uniform('t', t)
         frame = self.se.render()
 
