@@ -117,6 +117,10 @@ That is:
   \mathbf{Z^*} \cdot \mathbf{P} - \mathbf{Z^*} \cdot \mathbf{C}
 \end{bmatrix}.
 ```
+Or graphically:
+
+![viewing transformation](./viewing_transform.png)
+
 The first term is simply a product between the vertex position and the new axes, and the second term represents the translation. 
 Using the homogeneous notation to express the translational term, we can finaly write the viewing transform as a following 4 x 4 matrix:
 ```math
@@ -132,11 +136,15 @@ Using the homogeneous notation to express the translational term, we can finaly 
 
 This matrix is what is called the lookat matrix.
 
+
+
 ## Perspective transformation
 
-Perspective projection will transform a frustum (curtailed pyramid)-shaped 'viewing volume' into a 'cuboid' (a cube whose each side span from -1 to +1) in the normalized device coordinate.
+Perspective projection will transform a frustum (curtailed pyramid)-shaped 'viewing volume' into a 'cuboid' (a cube whose each side span from -1 to +1) in the normalized device coordinate (figure panel 1).
 The near and far ends of the viewing volume are defined by the two clipping planes (things outside these planes won't be rendered). 
 This transformation is similar to (classical) perspecitve *projection* of points onto the near clipping place, but is subtly different in that it retains depth information (which we need for dealing with occlusion).
+
+![perspective_transform](./perspective_transform.png)
 
 Now, let us assume that the field-of-view (FOV) in horizontal and vertical directions are respectively left-right and up-down symmetric, and half-FOV in X and Y directions are repsectively denoted as $`\theta`$ and $`\psi`$.
 Let as also denote the distances to the near and far clipping planes as $`N`$ and $`F`$. Because by convention the camera is pointed to the negative Z, the clipping planes are located at $`z = -N`$ and $`z = -F`$.
@@ -151,8 +159,7 @@ P_x \rightarrow \dfrac{P_x}{-P_z\tan\theta}
 ```math
 P_y \rightarrow \dfrac{P_y}{-P_z\tan\psi},
 ```
-which would be the X/Y coordinates of the vertex in the NDC (Note that $`-P_z`$ is a positive number -- anything with positive $`P_z`$ is behind the camera). 
-
+which would be the X/Y coordinates of the vertex in the NDC (Note that $`-P_z`$ is a positive number -- anything with positive $`P_z`$ is behind the camera). This is (2) in the following figure.
 
 **But!** This division by $`-P_z`$ is a *non-linear* operation that cannot be expressed by a 3 x 3 matrix multiplication. 
 Here, the homogenous notation comes in handy again: 
@@ -176,7 +183,7 @@ This already constrains the transformation matrix down to
 ```
 where $`\dfrac{P_z^*}{-P_z}`$ is the Z coordinate (pseudo-depth) of the vertex in the NDC, and $`a`$, $`b`$ are unknown factors. 
 
-Now, using the fact that near ($`P_z = -N`$) and far ($`P_z = -F`$) clipping planes respectively correspond to -1 and +1 in the NDC (i.e., $`\dfrac{P_z^*}{-P_z}`$) (note the Z flipping!), solving
+Now, using the fact that near ($`P_z = -N`$) and far ($`P_z = -F`$) clipping planes respectively correspond to -1 and +1 in the NDC (i.e., $`\dfrac{P_z^*}{-P_z}`$) (note the Z flipping! -- panel 3), solving
 ```math
 aP_z + b = P_z^* \Leftrightarrow -a - \dfrac{b}{-P_z} = \dfrac{P_z^*}{-P_z}
 ```
