@@ -59,6 +59,9 @@ c & f & i\end{bmatrix}.
 ```
 So what you see visually is a transpose of the actual matrix!
 
+Also note that OpenGL use the right-handed coordinate (for a historical reason; because shaders are programmable, you are actually free to do whatever you like) whereas the 'Normalized Device Coordinate' (NDC) is left-handed.
+As a consequence, the perspective projection involves flipping of Z axis (OpenGL thinks negative Z is far, whereas NDC thinkg positive Z is far).
+
 ## Viewing transformation
 
 A viewing transformation moves a vertex in the world coordinate to the camera-centered, view coordinate.
@@ -81,8 +84,53 @@ x \\ y \\ z \\ 1
 \end{bmatrix} =
 \begin{bmatrix}
 x+a \\ y+b \\ z+c \\ 1
-\end{bmatrix}
+\end{bmatrix}.
 ```
+
+Now, let us assume that 
+- the coordinate of our vertex is $`\mathbf{P}=\begin{bmatrix}P_x & P_y & P_z\end{bmatrix}^T`$, 
+- the position of our camera is $`\mathbf{C}=\begin{bmatrix}C_x & C_y & C_z\end{bmatrix}^T`$,
+- the point we are looking at (gaze) is $`\mathbf{G}`$, and
+- the vector indicating up is  $`\mathbf{U}`$.
+
+First, the line of sight in the view coordinate will point negative Z (as per OpenGL's right-handed convention). 
+Thus we define the new Z axis as a unit vector $`\mathbf{Z^*}=-\dfrac{(\mathbf{G}-\mathbf{C})}{\left|\mathbf{G}-\mathbf{C}\right|}`$ (negative of gazing point minus camera).
+
+Now, given the up vector $`\mathbf{U}`$, the new X (side) axis can be derived as a cross product: 
+$`\mathbf{X^*}=\dfrac{\mathbf{U}\times\mathbf{Z^*}}{\left|\mathbf{U}\times\mathbf{Z^*}\right|}`$ (Cross product follows the right-hand rule, so Y-Z order results in properly right-handed X).
+
+Because $`\mathbf{U}`$ is not guaranteed to be orthogonal to  $`\mathbf{Z^*}`$, we recalculate the new Y axis as
+$`\mathbf{Y^*}=\mathbf{Z^*}\times\mathbf{X^*}`$ (again note the order). Now we have an orthonormal bases for the view coordinate.
+
+The vertex position in the view coordinate $`\mathbf{P^*}`$ can be obtained by subtracting the camera position from the vertex position (in the world coordinate) and projecting it onto the three new axes. 
+That is:
+```math
+\mathbf{P^*} = \begin{bmatrix}
+  \mathbf{X^*} \cdot (\mathbf{P}-\mathbf{C}) \\
+  \mathbf{Y^*} \cdot (\mathbf{P}-\mathbf{C}) \\
+  \mathbf{Z^*} \cdot (\mathbf{P}-\mathbf{C})
+\end{bmatrix}
+=
+\begin{bmatrix}
+  \mathbf{X^*} \cdot \mathbf{P} - \mathbf{X^*} \cdot \mathbf{C} \\
+  \mathbf{Y^*} \cdot \mathbf{P} - \mathbf{Y^*} \cdot \mathbf{C} \\
+  \mathbf{Z^*} \cdot \mathbf{P} - \mathbf{Z^*} \cdot \mathbf{C}
+\end{bmatrix}.
+```
+The first term is simply a product between the vertex position and the new axes, and the second term represents the translation. 
+Using the homogeneous notation to express the translational term, we can finaly write the viewing transform as a following 4 x 4 matrix:
+```math
+\begin{bmatrix} \mathbf{P^*} \\ 1 \end{bmatrix} =
+\begin{bmatrix}
+  & {\mathbf{X^*}^T} & & -\mathbf{X^*} \cdot \mathbf{C} \\
+  & {\mathbf{Y^*}^T} & & -\mathbf{Y^*} \cdot \mathbf{C} \\
+  & {\mathbf{Z^*}^T} & & -\mathbf{Z^*} \cdot \mathbf{C} \\
+  0 & 0 & 0 & 1
+\end{bmatrix}
+\begin{bmatrix} \mathbf{P} \\ 1 \end{bmatrix}
+```
+
+
 
 
 
