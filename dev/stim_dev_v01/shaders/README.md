@@ -7,7 +7,7 @@ Because I keep forgetting how exactly these things work and become incapable of 
 There are three transformations to be taken care of, which are
 - **Model transformation** (from local coordinates of the object to the world coordinate)
 - **Viewing transformation** (from the world coordinate to the camera-centered view coordinate)
-- **Perspective projection** (from the view coordinate to the normalized device coordinate)
+- **Perspective transformation** (from the view coordinate to the normalized device coordinate)
 
 Because the model transformation is somewhat trivial (it is just vanila translation/rotation/scaling), my focus will be on the **viewing transformation** and **perspective projection**.
 
@@ -57,7 +57,7 @@ a & d & g\\
 b & e & h\\
 c & f & i\end{bmatrix}.
 ```
-So what you see visually is a transpose of the actual matrix!
+So **what you see visually is a transpose of the actual matrix!**
 
 Also note that OpenGL use the right-handed coordinate (for a historical reason; because shaders are programmable, you are actually free to do whatever you like) whereas the 'Normalized Device Coordinate' (NDC) is left-handed.
 As a consequence, the perspective projection involves flipping of Z axis (OpenGL thinks negative Z is far, whereas NDC thinkg positive Z is far).
@@ -127,8 +127,84 @@ Using the homogeneous notation to express the translational term, we can finaly 
   & {\mathbf{Z^*}^T} & & -\mathbf{Z^*} \cdot \mathbf{C} \\
   0 & 0 & 0 & 1
 \end{bmatrix}
-\begin{bmatrix} \mathbf{P} \\ 1 \end{bmatrix}
+\begin{bmatrix} \mathbf{P} \\ 1 \end{bmatrix}.
 ```
+
+This matrix is what is called the lookat matrix.
+
+## Perspective transformation
+
+Perspective projection will transform a frustum (curtailed pyramid)-shaped 'viewing volume' into a 'cuboid' (a cube whose each side span from -1 to +1) in the normalized device coordinate.
+The near and far ends of the viewing volume are defined by the two clipping planes (things outside these planes won't be rendered). 
+This transformation is similar to (classical) perspecitve *projection* of points onto the near clipping place, but is subtly different in that it retains depth information (which we need for dealing with occlusion).
+
+Now, let us assume that the field-of-view (FOV) in horizontal and vertical directions are respectively left-right and up-down symmetric, and half-FOV in X and Y directions are repsectively denoted as $`\theta`$ and $`\psi`$.
+Let as also denote the distances to the near and far clipping planes as $`N`$ and $`F`$. Because by convention the camera is pointed to the negative Z, the clipping planes are located at $`z = -N`$ and $`z = -F`$.
+
+First, let us focus on transforming X and Y coordinates of the vertex into the NDC cuboid.
+Let us consider a vertex $`\mathbf{P}=\begin{bmatrix}P_x & P_y & P_z\end{bmatrix}^T`$ (in the view coordinate).
+Now, the cross section between the viewing volume frustum and the plane $`z = P_z`$ is a rectangle with width $`2P_z\tan\theta`$ and height $`2P_z\tan\psi`$.
+Because the perspective projection would simply map this rectangle onto the (zero-centered) 2 x 2 square, you just divide the coodrinate of the vertex by the ratio:
+```math
+P_x \rightarrow \dfrac{P_x}{-P_z\tan\theta}
+```
+```math
+P_y \rightarrow \dfrac{P_y}{-P_z\tan\psi},
+```
+which would be the X/Y coordinates of the vertex in the NDC (Note that $`-P_z`$ is a positive number -- anything with positive $`P_z`$ is behind the camera). 
+
+
+**But!** This division by $`-P_z`$ is a *non-linear* operation that cannot be expressed by a 3 x 3 matrix multiplication. 
+Here, the homogenous notation comes in handy again: 
+if you can move $`\begin{bmatrix} \mathbf{P} \\ 1 \end{bmatrix}`$ to something like $`\begin{bmatrix} P_x/\tan\theta \\ P_y/\tan\psi \\ ? \\ -P_z \end{bmatrix}`$, 
+then the 'division by $`w`$' mechanic of the homogenous notaiton will take care of the non-linear part of this transformation.
+
+This already constrains the transformation matrix down to
+```math
+\begin{bmatrix}
+  1/\tan\theta & 0 & 0 & 0 \\
+  0 & 1/\tan\psi & 0 & 0 \\
+  0 & 0 & a & b \\
+  0 & 0 & -1 & 0
+\end{bmatrix}
+\begin{bmatrix}
+  P_x \\ P_y \\ P_z \\ 1
+\end{bmatrix} =
+\begin{bmatrix}
+  P_x/\tan\theta \\ P_y/\tan\psi \\ P_z^* \\ -P_z
+\end{bmatrix}
+```
+where $`\dfrac{P_z^*}{-P_z}`$ is the Z coordinate (pseudo-depth) of the vertex in the NDC, and $`a`$, $`b`$ are unknown factors. 
+
+Now, using the fact that near ($`P_z = -N`$) and far ($`P_z = -F`$) clipping planes respectively correspond to -1 and +1 in the NDC (i.e., $`\dfrac{P_z^*}{-P_z}`$) (note the Z flipping!), solving
+```math
+aP_z + b = P_z^* \Leftrightarrow -a - \dfrac{b}{-P_z} = \dfrac{P_z^*}{-P_z}
+```
+for $`a`$ and $`b`$, we get
+```math
+a = \dfrac{-(F+N)}{F-N}
+```
+```math
+b = \dfrac{-2FN}{F-N}.
+```
+Therefore, the final perspective projection matrix is
+```math
+\begin{bmatrix}
+  1/\tan\theta & 0 & 0 & 0 \\
+  0 & 1/\tan\psi & 0 & 0 \\
+  0 & 0 & \dfrac{-(F+N)}{F-N} & \dfrac{-2FN}{F-N} \\
+  0 & 0 & -1 & 0
+\end{bmatrix}.
+```
+Voila! Note that NDC needs to be stretched afterwards in case $`\theta\neq\psi`$.
+
+
+
+
+
+
+
+
 
 
 
