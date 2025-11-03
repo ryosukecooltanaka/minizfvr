@@ -147,11 +147,12 @@ This transformation is similar to (classical) perspecitve *projection* of points
 ![perspective_transform](./perspective_transform.png)
 
 Now, let us assume that the field-of-view (FOV) in horizontal and vertical directions are respectively left-right and up-down symmetric, and half-FOV in X and Y directions are repsectively denoted as $`\theta`$ and $`\psi`$.
-Let as also denote the distances to the near and far clipping planes as $`N`$ and $`F`$. Because by convention the camera is pointed to the negative Z, the clipping planes are located at $`z = -N`$ and $`z = -F`$.
+Let us also denote the distances to the near and far clipping planes as $`N`$ and $`F`$. Because by convention the camera is pointed to the negative Z, the clipping planes are located at $`z = -N`$ and $`z = -F`$.
 
 First, let us focus on transforming X and Y coordinates of the vertex into the NDC cuboid.
 Let us consider a vertex $`\mathbf{P}=\begin{bmatrix}P_x & P_y & P_z\end{bmatrix}^T`$ (in the view coordinate).
-Now, the cross section between the viewing volume frustum and the plane $`z = P_z`$ is a rectangle with width $`2P_z\tan\theta`$ and height $`2P_z\tan\psi`$.
+Now, the cross section between the viewing volume frustum and the plane $`z = P_z`$ is a rectangle with width $`-2P_z\tan\theta`$ and height $`-2P_z\tan\psi`$.
+(Note that $`-P_z`$ is a positive number -- anything with positive $`P_z`$ is behind the camera)
 Because the perspective projection would simply map this rectangle onto the (zero-centered) 2 x 2 square, you just divide the coodrinate of the vertex by the ratio:
 ```math
 P_x \rightarrow \dfrac{P_x}{-P_z\tan\theta}
@@ -159,7 +160,7 @@ P_x \rightarrow \dfrac{P_x}{-P_z\tan\theta}
 ```math
 P_y \rightarrow \dfrac{P_y}{-P_z\tan\psi},
 ```
-which would be the X/Y coordinates of the vertex in the NDC (Note that $`-P_z`$ is a positive number -- anything with positive $`P_z`$ is behind the camera). This is (2) in the following figure.
+which would be the X/Y coordinates of the vertex in the NDC. This is (2) in the following figure.
 
 **But!** This division by $`-P_z`$ is a *non-linear* operation that cannot be expressed by a 3 x 3 matrix multiplication. 
 Here, the homogenous notation comes in handy again: 
