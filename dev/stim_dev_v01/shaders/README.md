@@ -204,6 +204,32 @@ Therefore, the final perspective projection matrix is
 ```
 Voila! Note that NDC needs to be stretched afterwards in case $`\theta\neq\psi`$.
 
+### The case where viewing volume frustum is not left/right or top/bottom symmetric
+
+For example, if one wanted to place an animal higher or lower than the center of the screen, then the gaze angles to the top and bottom of the near-plane would be unequal, making the viewing volume frustum asymmetric.
+
+Because all the transformations we are doing are equivalent for X and Y axes and the Z axis transformation is independent from X/Y transforms, we can only think about the X axis here and apply the same change to the Y dimension as well.
+
+Now, let us denote the X position of left and right edges of the near clipping plane as $`L`$ and $`R`$, respectively. 
+As before, the X coordinate of the point $`\mathbf{P}=\begin{bmatrix}P_x & P_y & P_z\end{bmatrix}^T`$ projected onto the near clipping plane would be $`\dfrac{N}{-P_z}P_x`$.
+
+Now, we have to map the X range of $`(L, R)`$ of the near clipping plane to $`(-1, 1)`$ of the NDC, which can be written as $`f(x)=2\dfrac{x-L}{R-L}-1`$. Applying this to the $`P_x`$ projected onto the near clipping plane, we get
+```math
+P_x \rightarrow \dfrac{2N}{R-L} \dfrac{P_x}{-P_z} - \dfrac{R+L}{R-L}.
+```
+Now, as before, to achieve the division by $`-P_z`$ in the first term, we need to use the homogenous notation trick, and define the matrix so that $`w=-P_z`$. 
+Also, to get the second term ($`-\dfrac{R+L}{R-L}`$) after the division by $`-P_z`$, this needs to be a coefficient of $`P_z`$. With these consideration, we arrive at the transformation matrix
+```math
+\begin{bmatrix}
+  \dfrac{2N}{R-L} & 0 & \dfrac{R+L}{R-L} & 0 \\
+  0 & \dfrac{2N}{T-B} & \dfrac{T+B}{T-B} & 0 \\
+  0 & 0 & \dfrac{-(F+N)}{F-N} & \dfrac{-2FN}{F-N} \\
+  0 & 0 & -1 & 0
+\end{bmatrix},
+```
+where $`T, B`$ represents the top and bottom Y positions of the near clipping plane.
+
+
 
 
 
