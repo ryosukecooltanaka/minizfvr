@@ -119,7 +119,8 @@ class SceneEngine:
         Here, we reserve the space for texture based on a bitmap (i.e. buffer)
         To change the content of the buffer, use write() method of the texture buffer object
         """
-        texture_buffer = self.ctx.texture(bitmap.shape[:2], 3, data=bitmap)
+        # Dimension order for buffer texture is U * V * RGB!
+        texture_buffer = self.ctx.texture((bitmap.shape[1], bitmap.shape[0]), 3, data=bitmap)
         texture_buffer.filter = (moderngl.NEAREST, moderngl.NEAREST)
         self.textures.append(texture_buffer)
 
@@ -171,7 +172,7 @@ class WrappedShader:
         # The list of names are useful, because we need that to create VAO from VBO+shader
         self.input_keys = [x[0] for x in parse_glsl(vsh, 'in')] # list of (string, int) tuples
         self.input_total_width = np.sum([x[1] for x in parse_glsl(vsh, 'in')]) # this is the number of dimensions each vertex is supposed to have
-
+        print(self.input_keys)
         # Also get the list of Uniform (which is like the shader parameters) by parsing GLSL
         # Uniforms are variables that can be set from CPU and the same value are shared across all GPU processors
         # for each render call. This is used to for example set the camera directions and model translation.
@@ -204,6 +205,7 @@ class WrappedShader:
     def release(self):
         self.prog.release()
 
+# todo: storing uniform as dict was probably a bad idea.
 class VirtualObject:
     """
     A thin wrapper that combines a WrappedShader, ndarray representing vertices (with a dimension specified by the
@@ -256,6 +258,7 @@ class VirtualObject:
         if self.texture_buffer is not None:
             self.texture_buffer.use()
         # synchronize uniform variables
+        # todo: now I am not sure if this is right because this will increase the number of GPU write
         for key in self.uniform_dict.keys():
             self.shader.prog[key].value = self.uniform_dict[key]
         # render

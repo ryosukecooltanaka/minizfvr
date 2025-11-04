@@ -1,14 +1,10 @@
 # version 330
 
-// 3D vertex coordinates + 2D UV map = 5D input
-in vec3 vert;
-in vec2 uv_orig;
+// passed thru from the vertex shader
+in vec2 uv_coord;
 
-// For each fragment, we output UV coordinate
-out vec2 uv;
+uniform sampler2D Texture;
 
-// Parameters defining the projections
-uniform vec2 z_clip; // (near, far)
-uniform vec2 fov;
-
-
+void main(){
+    gl_FragColor = texture(Texture, uv_coord);
+}

@@ -188,6 +188,9 @@ def parse_glsl(text, qualifier):
             words = re.split('\s', line)
             if words[0] == qualifier:
                 # Unless something wacky happening, the second argument is the variable type and the third the name.
+                # We will ignore sampler2D type because that just looks for the texture
+                if words[1] == 'sampler2D':
+                    continue
                 # With an assumption that we are never going to pass matrices as inputs, I look for numbers in the
                 # type name (like vec2 or vec3), and count up these numbers to derive the shape of inputs.
                 temp = re.search('[0-9]+', words[1])
