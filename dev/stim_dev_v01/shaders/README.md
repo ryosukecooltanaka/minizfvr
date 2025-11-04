@@ -58,7 +58,7 @@ c & f & i\end{bmatrix}.
 So **what you see visually is a transpose of the actual matrix!**
 
 Also note that OpenGL use the right-handed coordinate (for a historical reason; because shaders are programmable, you are actually free to do whatever you like) whereas the 'Normalized Device Coordinate' (NDC) is left-handed.
-As a consequence, the perspective projection involves flipping of Z axis (OpenGL thinks negative Z is far, whereas NDC thinkg positive Z is far).
+As a consequence, the perspective projection involves flipping of Z axis (OpenGL points camera to negative Z, whereas in the NDC camera points positive Z).
 
 ## Viewing transformation
 
