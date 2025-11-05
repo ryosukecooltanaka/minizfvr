@@ -79,15 +79,21 @@ class TestPRStim(StimulusGenerator):
 
         self.se.background = (0.1, 0.1, 0.1, 1.0)
 
-
+        self.variables_to_save.extend(['vigor', 'bias'])
+        self.vigor = 0
+        self.bias = 0
 
     def draw_frame(self, t, paint_area_mm, vigor, bias):
         """
         Receive timestamp, scale info, and closed loop information from the main app
         Return the stimulus frame
         """
+
+        self.vigor = vigor
+        self.bias = bias
+
         # move the thing
-        #self.se.set_uniform('rot', (t, 0, 0))
+        self.se.set_uniform('rot', (t, np.sin(t), -t))
         self.se.set_uniform('tr', (40*np.cos(t), 0, 30*np.sin(t)))
 
         # render 3 frames for each screen

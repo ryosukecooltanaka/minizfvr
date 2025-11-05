@@ -189,6 +189,10 @@ class CalibrationPanel(QWidget):
 
             self.param.ppad = self.pad_box.value()
 
+            # we put the size of the entire paint area in w/h
+            self.param.w = (self.param.ph + self.param.ppad)*2 + self.param.pw
+            self.param.h = self.param.ph + self.param.ppad + self.param.pw
+
         self.param.paramChanged.emit() # emit signal -> call gui refresh
 
     def showEvent(self, event):

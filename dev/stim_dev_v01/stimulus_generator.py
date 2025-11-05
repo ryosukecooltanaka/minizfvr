@@ -24,13 +24,16 @@ class StimulusGenerator(QObject):
         if t > self.duration:
             self.durationPassed.emit()
         frame = self.draw_frame(t, *args, **kwargs)
+
+        # return should be a list of frame even if there is only one frame,
+        # so we can handle single panel vs. panorama outputs in a consistent fashion
         return frame
 
     def draw_frame(self, t, *args, **kwargs):
         """
         Child classes should reimplement this method
         """
-        pass
+        return [np.random.rand(100)]
 
     def close(self):
         """

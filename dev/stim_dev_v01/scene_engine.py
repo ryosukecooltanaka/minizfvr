@@ -172,14 +172,6 @@ class WrappedShader:
         # The list of names are useful, because we need that to create VAO from VBO+shader
         self.input_keys = [x[0] for x in parse_glsl(vsh, 'in')] # list of (string, int) tuples
         self.input_total_width = np.sum([x[1] for x in parse_glsl(vsh, 'in')]) # this is the number of dimensions each vertex is supposed to have
-        print(self.input_keys)
-        # Also get the list of Uniform (which is like the shader parameters) by parsing GLSL
-        # Uniforms are variables that can be set from CPU and the same value are shared across all GPU processors
-        # for each render call. This is used to for example set the camera directions and model translation.
-        uniforms = []
-        for sh in (vsh, gsh, fsh):
-            uniforms.extend(parse_glsl(sh, 'uniform'))
-        self.uniforms = uniforms
 
     def load_shader_from_path(self, path):
         """
@@ -205,7 +197,7 @@ class WrappedShader:
     def release(self):
         self.prog.release()
 
-# todo: storing uniform as dict was probably a bad idea.
+
 class VirtualObject:
     """
     A thin wrapper that combines a WrappedShader, ndarray representing vertices (with a dimension specified by the
@@ -225,17 +217,6 @@ class VirtualObject:
         # Pair the vertices in the buffer with the shader
         self.vertex_array = ctx.simple_vertex_array(shader.prog, self.vertex_buffer, *self.shader.input_keys)
 
-        # Because Uniform variables in the shader program are used to control object specific setting such as the
-        # model translation and rotation, it makes sense for VirtualObject to keep these values as its own attributes
-        # and enforce these values onto the shader program before each render call (although Uniform is also used
-        # for global purposes such as camera directions etc.). To render dynamic scenes, one should update the values
-        # in this uniform_dict under each VirtualObject within a SceneEngine.
-        self.uniform_dict = {}
-        for key_len_pair in self.shader.uniforms:
-            # we are being loose about the actual value type here because as long as you feed ndarray it is nicely
-            # implicitly cast (which is not the case if you give them length 1 list or tuple)
-            self.uniform_dict[key_len_pair[0]] = np.zeros(key_len_pair[1])
-
         # Prepare attributes to store a handle for the texture buffer
         # I am imagining the case where I have to use different buffer on the same object (e.g., use the same virtual
         # cylinder, but different size of bitmap to be texture-mapped etc)
@@ -245,10 +226,7 @@ class VirtualObject:
         """
         Set uniform value
         """
-        if key in self.uniform_dict.keys():
-            self.uniform_dict[key] = val
-        else:
-            raise ValueError('{} is not a Uniform variable of this shader'.format(key) )
+        self.shader.prog[key].value = val
 
     def render(self):
         """
@@ -257,10 +235,6 @@ class VirtualObject:
         # Use texture buffer
         if self.texture_buffer is not None:
             self.texture_buffer.use()
-        # synchronize uniform variables
-        # todo: now I am not sure if this is right because this will increase the number of GPU write
-        for key in self.uniform_dict.keys():
-            self.shader.prog[key].value = self.uniform_dict[key]
         # render
         self.vertex_array.render(self.shader.primitive_type)
 

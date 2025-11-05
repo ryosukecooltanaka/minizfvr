@@ -130,7 +130,7 @@ class StimulusControlWindow(QMainWindow):
 
         # When parameter is changed, we immediately repaint stimuli,
         # which is especially important for adjusting the paint area interactively
-        self.param.paramChanged.connect(self.stimulus_window.repaint)
+        self.param.paramChanged.connect(self.stimulus_window.adjust_canvas)
 
         # When we click the start button, start / stop stimulus
         self.ui.start_button.clicked.connect(self.toggle_run_state)
@@ -229,10 +229,7 @@ class StimulusControlWindow(QMainWindow):
             # usually only the case during the first frame, we insert new bitmap sizes into the parameter.
             # This will only affect what is being shown if we are forcing the equal ratio and the aspect
             # ratio of the bitmap changes. I assume this is a very rare event.
-            if self.param.is_panorama:
-                current_bitmap_shape = stim_frame[0].shape[:2]
-            else:
-                current_bitmap_shape = stim_frame.shape[:2]
+            current_bitmap_shape = stim_frame[0].shape[:2]
             if (self.param.bitmap_h, self.param.bitmap_w) != current_bitmap_shape: # can be 3d!
                 self.param.bitmap_h, self.param.bitmap_w = current_bitmap_shape
                 self.ui.calibration_panel.refresh_param()

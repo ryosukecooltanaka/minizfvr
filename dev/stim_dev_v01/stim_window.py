@@ -1,36 +1,42 @@
+import time
+
 import numpy as np
 
 from PyQt5.QtCore import QRect, QLine, Qt, QPoint, pyqtSignal
-from PyQt5.QtGui import QPainter, QPen, QColor, QTransform, QWindow
+from PyQt5.QtGui import QPainter, QPen, QColor, QBrush, QTransform, QWindow
 from PyQt5.QtWidgets import (
     QWidget,
     QLabel
 )
 from qimage2ndarray import array2qimage
 from utils import roundButton
+from parameters import StimParamObject
 
 class StimulusWindow(QWidget):
     """
     The second window on which we present stimuli to be viewed by the animals
     """
-    def __init__(self, *args, param, corner, **kwargs):
+    def __init__(self, *args, param: StimParamObject, corner, **kwargs):
         super().__init__(*args, **kwargs)
         self.setWindowTitle('Stimulus Window')
         self.setGeometry(corner[0], corner[1], 500, 500)
         self.setStyleSheet("background-color: black;")
 
-        # prepare attributes to store painting area rects
-        self.rect = None # for single window
-        self.prect = None # for panorama
-        self.param = param # reference to parent parameters (= it is synchronized -- we are not copying anything)
+        # reference to parent parameters (= it is synchronized -- we are not copying anything)
+        self.param = param
 
-        # ndarray of stimulus frame
-        self.frame = None
+        ## Prepare paint areas (as list, to force unified behaviors)
+        if not self.param.is_panorama:
+            self.canvas = [PaintCanvas(parent=self)]
+        else:
+            self.canvas = [
+                PaintCanvas(parent=self, rotation=-90, invert=True, screen_name='L', screen_color=(200, 30, 30)),
+                PaintCanvas(parent=self, rotation=0,   invert=True, screen_name='F', screen_color=(30, 200, 30)),
+                PaintCanvas(parent=self, rotation=+90, invert=True, screen_name='R', screen_color=(30, 30, 200))
+            ]
+        self.adjust_canvas()
 
-        # flags
-        self.show_calibration_frame = False # if true, show a frame around the paint area
-
-        # get rid of the title bar and show the custom button (not complete... but I guess better?)
+        ## Get rid of the title bar and show the custom button
         self.setWindowFlags(Qt.Widget | Qt.CustomizeWindowHint)
         self.resize_buttons = [
             roundButton('', self, color_rgb=(200, 40, 20), radius=7), # red for close
@@ -43,12 +49,93 @@ class StimulusWindow(QWidget):
         for i in range(3):
             self.resize_buttons[i].move(i*20+7, 10)
 
-
     def toggle_maximize(self):
         if self.isMaximized():
             self.showNormal()
         else:
             self.showMaximized()
+
+    def adjust_canvas(self):
+        """
+        Set the new geometry for paint canvas according to the latest parameter.
+        This is a parameter change callback.
+        """
+
+        if not self.param.is_panorama:
+            self.canvas[0].paint_area_rect = (0 , 0, self.param.w, self.param.h)
+            self.canvas[0].setGeometry(self.param.x, self.param.y, self.param.w, self.param.h)
+        else:
+            # Move paint canvas according to the parameter
+            # also, take care of translation necessary for fitting flipped/rotated image into the widget
+            # left screen
+            self.canvas[0].setGeometry(self.param.x,
+                                       self.param.y+self.param.ph+self.param.ppad,
+                                       self.param.ph, self.param.pw)
+            self.canvas[0].paint_area_offset = (self.param.ph, self.param.pw)
+            # front screen
+            self.canvas[1].setGeometry(self.param.x+self.param.ph+self.param.ppad,
+                                       self.param.y,
+                                       self.param.pw, self.param.ph)
+            self.canvas[1].paint_area_offset = (0, self.param.ph)
+            # right screen
+            self.canvas[2].setGeometry(self.param.x+self.param.ph+self.param.ppad*2+self.param.pw,
+                                       self.param.y+self.param.ph+self.param.ppad,
+                                       self.param.ph, self.param.pw)
+            self.canvas[2].paint_area_offset = (0, 0)
+            for canvas in self.canvas:
+                canvas.paint_area_rect = (0, 0, self.param.pw, self.param.ph)
+
+
+    def receive_and_paint_new_frame(self, frame):
+        """
+        This is called from upstream every time new stimulus frame is generated
+        Receives a frame bitmap and paint it
+        """
+        tic = time.perf_counter()
+
+        for this_frame, canvas in zip(frame, self.canvas):
+            canvas.frame = this_frame
+            canvas.repaint()
+
+        print('{:0.2f}ms'.format((time.perf_counter()-tic)*1000))
+
+    def toggle_calibration_frame(self, state):
+        """ As we open/close the calibration panel (under ui),
+        toggle the calibration frame around the paint area """
+        for canvas in self.canvas:
+            canvas.show_calibration_frame = state
+        self.update()
+
+class PaintCanvas(QWidget):
+    """
+    A rectangular container for the drawImage paint region.
+    The reason why we want this container (rather than directly drawing images onto the StimulusWindow)
+    is because the execution time of repaint() scales with the number of pixels, even if these pixels are
+    not changing. We can achieve the equivalent effect by specifying the update region as a rect
+    when calling repaint(), but for the panorama case, we will still have empty areas between the screens
+    and not updating these pixels will have meaningful impacts on the duration of repaint() call
+    """
+    def __init__(self,
+                 parent,
+                 invert=False,
+                 rotation=0.0,
+                 screen_name=None,
+                 screen_color=(255, 0, 0)):
+
+        super().__init__(parent)
+
+
+        # fixed parameter, should be passed at construction
+        self.invert = invert
+        self.rotation = rotation
+        self.screen_name = screen_name
+        self.screen_color = screen_color
+
+        # dynamically updated ones
+        self.frame = None
+        self.show_calibration_frame = False
+        self.paint_area_rect = None # we need to keep track of this pre-transform
+        self.paint_area_offset = (0,0) # there should be nice mathematical way to derive this, but doing it dumb way
 
     def paintEvent(self, event):
         """
@@ -58,110 +145,43 @@ class StimulusWindow(QWidget):
         """
         qp = QPainter()
         qp.begin(self)
-
-        # todo: delegate actual painting to separate methods?
-        # the paint method should receive image bitmap to be shown
-        # the paint method should read rect information from the parent and use it to scale things
-        # also there should be a choice of doing 1 window vs 3 window
-
         qp.setRenderHint(QPainter.SmoothPixmapTransform) # not sure if I want this
-        qp.setPen(Qt.NoPen)
-
-        if not self.param.is_panorama:
-            self.paint_single_window_stimulus(qp)
-        else:
-            self.paint_panorama_stimulus(qp)
-
+        self.paint_frame(qp)
         qp.end()
 
-    def paint_single_window_stimulus(self, qp:QPainter):
+    def paint_frame(self, qp:QPainter):
         """
-        Draw the stimulus bitmap for single window case
+        Draw the stimulus bitmap, filling the entire widget
         """
+        # apply transform if necessary (for panorama case)
+        qp.setPen(Qt.NoPen)
+        qp.setBrush(Qt.NoBrush)
 
-        # origin shift
-        qp.translate(self.param.x, self.param.y)
+        transform = QTransform()
+        transform.translate(*self.paint_area_offset)
+        transform.rotate(self.rotation)
+        if self.invert:
+            transform.scale(1.0, -1.0)
+
+        qp.setTransform(transform)
+        rect = QRect(*self.paint_area_rect)
 
         if self.frame is not None:
-            qp.drawImage(QRect(0, 0, self.param.w, self.param.h), array2qimage(self.frame))
+            qp.drawImage(rect, array2qimage(self.frame))
 
         """ Draw frame around the paint area (for calibration) """
         if self.show_calibration_frame:
-            qp.setBrush(Qt.NoBrush)
             thick_pen = QPen(QColor(255, 0, 127))
             thick_pen.setWidth(3)
             qp.setPen(thick_pen)
-            qp.drawRect(QRect(0, 0, self.param.w, self.param.h))  # frame
-            qp.drawLine(QLine(0, self.param.h // 2, self.param.w, self.param.h // 2))
-            qp.drawLine(QLine(self.param.w // 2, 0, self.param.w // 2, self.param.h))
+            qp.drawRect(rect)  # frame
+            qp.drawLine(QLine(0, rect.height() // 2, rect.width(), rect.height() // 2)) # center line
+            qp.drawLine(QLine(rect.width() // 2, 0, rect.width() // 2, rect.height()))
 
-    def paint_panorama_stimulus(self, qp:QPainter):
-        """
-        Draw panoramic stimulus
-        When we are doing the panoramic mode, stimulus generator will return a list of 3 rendered images (in upright
-        position). We have to appropriately invert and rotate these images considering the mirrors. We achieve this
-        inversion using QTransform.
-        We assume the frames to be ordered from left to right.
-        """
-
-        # first, prepare transforms (with the global origin transform)
-        transforms = [QTransform().translate(self.param.x, self.param.y) for i in range(3)]
-
-        # additional translation to top left corner of all images
-        transforms[0].translate(self.param.ph, self.param.ph+self.param.ppad+self.param.pw)
-        transforms[1].translate(self.param.ph+self.param.ppad, self.param.ph)
-        transforms[2].translate(self.param.ph+self.param.ppad*2+self.param.pw, self.param.ph+self.param.ppad)
-
-        # rotation
-        transforms[0].rotate(-90)
-        transforms[2].rotate(+90)
-
-        # scaling
-        transforms = [x.scale(1.0, -1.0) for x in transforms]
-        rect = QRect(0, 0, self.param.pw, self.param.ph)
-
-        if self.frame is not None:
-            for this_transform, this_frame in zip(transforms, self.frame):
-                qp.setTransform(this_transform)
-                qp.drawImage(rect, array2qimage(this_frame))
-
-        # calibration frame
-        if self.show_calibration_frame:
-            # No fill, thick pink lines for calibration
-            thick_pen = QPen(QColor(255, 0, 127))
-            thick_pen.setWidth(3)
-            qp.setBrush(Qt.NoBrush)
-            qp.setPen(thick_pen)
-            for this_transform in transforms:
-                # paint frames
-                qp.setTransform(this_transform)
-                qp.drawRect(rect)
-                # paint center lines
-                qp.drawLine(QLine(0, self.param.ph // 2, self.param.pw, self.param.ph // 2))
-                qp.drawLine(QLine(self.param.pw // 2, 0, self.param.pw // 2, self.param.ph))
-
-            # also draw letters on the screen
-            font = qp.font()
-            font.setPixelSize(min(self.param.ph, self.param.pw))
-            qp.setFont(font)
-            colors = ((255, 30, 30), (30, 255, 30), (30, 30, 255))
-            for this_transform, screen_name, color in zip(transforms, ('L', 'F', 'R'), colors):
-                qp.setTransform(this_transform)
-                qp.setPen(QPen(QColor(*color)))
-                qp.drawText(rect, Qt.AlignCenter, screen_name)
-
-
-
-    def receive_and_paint_new_frame(self, frame):
-        """
-        This is called from upstream every time new stimulus frame is generated
-        Receives a frame bitmap and paint it
-        """
-        self.frame = frame
-        self.repaint()
-
-    def toggle_calibration_frame(self, state):
-        """ As we open/close the calibration panel (under ui),
-        toggle the calibration frame around the paint area """
-        self.show_calibration_frame = state
-        self.repaint()
+            # draw letter as well
+            if self.screen_name is not None:
+                font = qp.font()
+                font.setPixelSize(min(self.height(), self.width()))
+                qp.setFont(font)
+                qp.setPen(QPen(QColor(*self.screen_color)))
+                qp.drawText(rect, Qt.AlignCenter, self.screen_name)

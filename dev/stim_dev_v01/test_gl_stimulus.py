@@ -31,7 +31,7 @@ class TestGLStim(StimulusGenerator):
         self.se.set_uniform('t', t)
         frame = self.se.render()
 
-        return frame
+        return [frame]
 
     def close(self):
         self.se.release()

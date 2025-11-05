@@ -49,7 +49,7 @@ class TestStim(StimulusGenerator):
 
         wave = (128 + 127 * np.dstack((linear_wave, axial_wave, axial_wave))).astype(np.uint8)
 
-        return wave
+        return [wave]
 
 
 if __name__ == "__main__":
