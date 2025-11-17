@@ -37,4 +37,4 @@ Edit these files to configure correct cameras, video paths etc.
 ### minizfstim
 - The `minizfstim` package is not intended to be run as a main script.
 - Instead, you are supposed to write a `__main__` python script that defines a custom `StimulusGenerator` and pass that to `StimApp`
-- See scripts under `examples` for details.
+- See scripts under `examples` for details (run them like `python -m minizfvr.example.test_stimulus`).

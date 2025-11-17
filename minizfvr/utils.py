@@ -132,9 +132,9 @@ class TypeForcedEdit(QLineEdit):
     """
     Type-checking numeric entries in upper layers is stupid so we subclass LineEdit
     """
-    def __init__(self, forced_type: type):
+    def __init__(self, forced_type: type, val=None):
         super().__init__()
-        self.val = None
+        self.val = val
         self.forced_type = forced_type
         # Every time we type in new values, we make sure they conform to whatever type we expect
         # otherwise we keep the old value

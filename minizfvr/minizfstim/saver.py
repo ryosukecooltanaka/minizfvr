@@ -3,8 +3,8 @@ import numpy as np
 import h5py
 from pathlib import Path
 from PyQt5.QtCore import Qt
-from parameters import StimParamObject
-from stimulus_generator import StimulusGenerator
+from .parameters import StimParamObject
+from .stimulus_generator import StimulusGenerator
 from ..utils import sync_buffer_to_file
 
 # todo: saving datapoint by datapoint is slow -- do chuncked saving

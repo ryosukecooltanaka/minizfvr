@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from qimage2ndarray import array2qimage
 from ..utils import roundButton
-from parameters import StimParamObject
+from .parameters import StimParamObject
 
 class StimulusWindow(QWidget):
     """

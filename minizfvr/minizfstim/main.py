@@ -9,12 +9,12 @@ from PyQt5.QtWidgets import (
 
 import qdarkstyle
 
-from parameters import StimParamObject
-from stim_window import StimulusWindow
-from panels import StimulusControlPanel
+from .parameters import StimParamObject
+from .stim_window import StimulusWindow
+from .panels import StimulusControlPanel
 from ..communication import Receiver
-from estimator import Estimator
-from saver import Saver
+from .estimator import Estimator
+from .saver import Saver
 
 class StimulusApp:
     """
