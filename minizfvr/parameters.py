@@ -2,7 +2,7 @@ import json
 import os
 
 """
-A parent class for implementing parameter object for both minizftt and stimulator
+A parent class for implementing parameter object for both minizftt and minizfstim
 implementing loading/saving behaviors
 """
 
@@ -10,14 +10,14 @@ class BaseParams:
     """
     Implement methods to read/write parameters from json
     """
-    def load_config_from_json(self, config_path = './config.json', verbose=False):
+    def load_config_from_json(self, config_path, verbose=False):
         if os.path.isfile(config_path):
             print('Loading parameters from from ', config_path)
             with open(config_path, 'r') as f:
                 config_dict = json.load(f)
                 self.read_param_from_dict(config_dict, verbose=verbose)
 
-    def save_config_into_json(self, config_path = './config.json'):
+    def save_config_into_json(self, config_path):
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(self.__dict__, f, ensure_ascii=False, indent=4)
 

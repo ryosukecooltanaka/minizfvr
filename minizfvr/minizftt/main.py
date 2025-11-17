@@ -62,7 +62,7 @@ class MiniZFTT(QMainWindow):
         # Prepare the parameter object, and load config
         # Note that the parameter object inherits QObject and can emit signals
         self.param = TrackerParamObject()
-        self.param.load_config_from_json()
+        self.param.load_config_from_json(self.param.config_path)
 
         # Create other widgets & arrange them onto the main window
         self.camera_panel = CameraPanel(**self.param.__dict__)
@@ -311,7 +311,7 @@ class MiniZFTT(QMainWindow):
         This will be called when the main window is closed.
         Release resources for graceful exit.
         """
-        self.param.save_config_into_json() # save current config to the file
+        self.param.save_config_into_json(self.param.config_path) # save current config to the file
         self.camera.exit_acquisition_event.set() # ping the child process, exit acquisition while loop
         self.tracker.exit_acquisition_event.set()
         time.sleep(0.01) # Just to make sure that we see the end of acquisition loop before killing the process...

@@ -136,9 +136,6 @@ class DummyCamera(Camera):
     def close(self):
         self.video.release()
 
-
-
-
 def SelectCameraByName(camera_name, **kwargs):
     """
     Main GUI program calls this function to get the camera object.

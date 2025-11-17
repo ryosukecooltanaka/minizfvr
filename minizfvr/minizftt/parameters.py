@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-import json
-import os
+from pathlib import Path
 from PyQt5.QtCore import QObject, pyqtSignal
 from ..parameters import BaseParams
 
@@ -12,6 +11,9 @@ But basically it's just a bunch of attribtues
 
 @dataclass
 class TailTrackerParams(BaseParams):
+
+    # default config path (home directory)
+    config_path: Path = Path.home() / 'minizftt_config.json'
 
     # camera settings
     camera_type: str = None

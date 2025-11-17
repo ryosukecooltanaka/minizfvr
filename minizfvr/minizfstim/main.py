@@ -81,7 +81,7 @@ class StimulusControlWindow(QMainWindow):
 
         ## Create a parameter object & load config
         self.param = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
-        self.param.load_config_from_json()
+        self.param.load_config_from_json(self.param.config_path)
         self.param.is_panorama = is_panorama # this param should be dictated by each stimulus generator
 
         ## Prepare a receiver object that listens to the tail tracking data & attempt the connection
@@ -256,4 +256,4 @@ class StimulusControlWindow(QMainWindow):
         self.stimulus_generator.close()
         self.stimulus_window.close()
         self.receiver.close()
-        self.param.save_config_into_json()
+        self.param.save_config_into_json(self.param.config_path)

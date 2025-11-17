@@ -102,7 +102,7 @@ class Saver:
             self.stim_index = 0
 
         ## save parameter
-        param.save_config_into_json(run_path / 'config.json')
+        param.save_config_into_json(run_path / 'minizfstim_config.json')
 
         print('Initialized saving files for {} run {}'.format(fish_name, run_name))
 

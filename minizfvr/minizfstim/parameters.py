@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 from PyQt5.QtCore import QObject, pyqtSignal
 from ..parameters import BaseParams
 
@@ -6,6 +7,9 @@ from ..parameters import BaseParams
 class StimulusAppParams(BaseParams):
 
     is_panorama: bool = False
+
+    # config path (home directory)
+    config_path: Path = Path.home() / 'minizfstim_config.json'
 
     # specify paint area (for single window mode)
     x: int = 0
