@@ -91,13 +91,9 @@ class StimulusWindow(QWidget):
         This is called from upstream every time new stimulus frame is generated
         Receives a frame bitmap and paint it
         """
-        tic = time.perf_counter()
-
         for this_frame, canvas in zip(frame, self.canvas):
             canvas.frame = this_frame
-            canvas.repaint()
-
-        print('{:0.2f}ms'.format((time.perf_counter()-tic)*1000))
+            canvas.repaint(0, 0, canvas.width(), canvas.height()) # just to be explicit... prob. doesn't matter
 
     def toggle_calibration_frame(self, state):
         """ As we open/close the calibration panel (under ui),
