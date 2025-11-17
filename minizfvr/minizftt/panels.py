@@ -1,6 +1,6 @@
 import numpy as np
 import pyqtgraph as pg
-from parameters import TailTrackerParams
+from .parameters import TailTrackerParams
 from ..utils import TypeForcedEdit, bistateButton
 
 from PyQt5.QtCore import Qt, QPointF

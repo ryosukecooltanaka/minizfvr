@@ -9,7 +9,7 @@ class StimulusAppParams(BaseParams):
     is_panorama: bool = False
 
     # config path (home directory)
-    config_path: Path = Path.home() / 'minizfstim_config.json'
+    config_path: str = str(Path.home() / 'minizfstim_config.json')
 
     # specify paint area (for single window mode)
     x: int = 0

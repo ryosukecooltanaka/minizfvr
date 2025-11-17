@@ -35,10 +35,10 @@ from PyQt5.QtWidgets import (
 import qdarkstyle
 
 from ..utils import decode_array_to_frame
-from camera import SelectCameraByName
-from panels import CameraPanel, AnglePanel, ControlPanel
-from tracker import TrackerObject
-from parameters import TrackerParamObject
+from .camera import SelectCameraByName
+from .panels import CameraPanel, AnglePanel, ControlPanel
+from .tracker import TrackerObject
+from .parameters import TrackerParamObject
 
 # TO DO: Make the parameter QObject and combine things through signals
 

@@ -13,7 +13,7 @@ But basically it's just a bunch of attribtues
 class TailTrackerParams(BaseParams):
 
     # default config path (home directory)
-    config_path: Path = Path.home() / 'minizftt_config.json'
+    config_path: str = str(Path.home() / 'minizftt_config.json')
 
     # camera settings
     camera_type: str = None
