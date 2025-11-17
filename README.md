@@ -1,18 +1,40 @@
-# minizfvr (minimal virtual reality for zebrafish)
+# minizfvr: minimal virtual reality for zebrafish
+
 A stab at a portable software for a tail-based 3D VR
 
-The strategy is to first figure out all the peripheral processes (interfacing with camera API, tail tracking algorithms etc.), and then learn multiprocessing, finally combining everything into a single GUI with 2 windows (one for captured image, one for stimulus)
+The goal is to keep this maximally simple even if it is dumb s.t. 
+any motivated individual can read it through and understand 
+what is going on under the hood.
 
-The goal is to keep this maximally simple even if it is dumb s.t. any motivated individual can read it through and understand what is going on under the hood 
+## What this is
+The package contains two separate applications, `minizftt` and `minizfstim`.
 
+`minizftt` does tail tracking.
 
-## Note on environments
-Currently things are running with
-- `python=3.10.6`
-- `numpy=2.0.2`
-- `scipy=1.13.1`
-- `matplotlib=3.8.4`
+`minizfstim` does stimulus presentations.
 
-But getting things working on jupyter is somehow very finicky. In new kernels it throws AsyncIO related errors and the kernel crashes.
-The current working environment was created with `python=3.10.6`, `matplotlib=3.6.0`, `numpy=1.24`, `ipykernel=6.30.1` but AsyncIO didn't stop unitl when I installed `scipy=1.9.1`. It continues to work after updating `numpy`, `scipy`, `matplotlib`, but newly created environments with these packages still fails (some now-unnecessary dependencies are secretly necessary for AsyncIO?).
+The two applications talk to each other through named pipes. 
+They can be used with other applications, as long as 
+you implement compatible communication protocols on the other end.
 
+## Installation
+- Create a conda environment using the `environment.yml` file.
+  - Note that camera APIs probably need to be separately installed for each manufacturer. 
+- Clone the repository to local.
+- Install the local repo as an editable (-e) package by running `python -m pip -e <path to repo>`
+
+## Configuration
+The both applications will generate config files under the home directory on their 
+respective first run (`minizftt_config.json` and `minizfstim_config.json`).
+Edit these files to configure correct cameras, video paths etc.
+
+## Quick Start
+
+### minizftt
+- Enter the conda environment.
+- Running `python -m minizfvr.minizftt.main` will start the app.
+
+### minizfstim
+- The `minizfstim` package is not intended to be run as a main script.
+- Instead, you are supposed to write a `__main__` python script that defines a custom `StimulusGenerator` and pass that to `StimApp`
+- See scripts under `examples` for details.
