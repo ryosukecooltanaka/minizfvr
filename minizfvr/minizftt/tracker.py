@@ -60,7 +60,7 @@ class TrackerObject():
         # Crate the connection (open the port)
         # I am hard-coding this here, as wrapping these things into an object and assigning this
         # as an instance attribute caused weird behaviors
-        listener = Listener(('localhost', 6000))
+        listener = Listener(('localhost', self.param['localhost_port']))
 
         # Initially there is no connection -- this will be used to update the connect button in the GUI
         self.connection_lost_event.set()

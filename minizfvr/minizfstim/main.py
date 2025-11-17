@@ -85,7 +85,7 @@ class StimulusControlWindow(QMainWindow):
         self.param.is_panorama = is_panorama # this param should be dictated by each stimulus generator
 
         ## Prepare a receiver object that listens to the tail tracking data & attempt the connection
-        self.receiver = Receiver()
+        self.receiver = Receiver(self.param.localhost_port)
 
         ## Create an estimator object that comuputes swim bouts given tail angle traces
         self.estimator = Estimator() # todo: pass parameters?

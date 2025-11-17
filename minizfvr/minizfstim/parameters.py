@@ -44,6 +44,9 @@ class StimulusAppParams(BaseParams):
     animal_age: int = 7
     animal_comment: str = ''
 
+    # communication: make sure they are the same across tracker and stim
+    localhost_port: int = 6000
+
 class StimParamObject(QObject, StimulusAppParams):
     """
     We combine the parameter class with QObject, so it can emit an event.

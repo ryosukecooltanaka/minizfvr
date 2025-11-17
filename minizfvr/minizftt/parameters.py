@@ -37,6 +37,9 @@ class TailTrackerParams(BaseParams):
     # visualization related parameters
     angle_trace_length: int = 1000
 
+    # communication: make sure they are the same across tracker and stim
+    localhost_port: int = 6000
+
 class TrackerParamObject(QObject, TailTrackerParams):
     """
     We combine the parameter class with QObject, so it can emit an event.
