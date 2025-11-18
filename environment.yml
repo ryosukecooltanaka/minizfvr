@@ -2,16 +2,16 @@ name: minizfvr
 channels:
   - conda-forge
 dependencies:
-  - python>=3.10
+  - python=3.10
   - pip
-  - pyqt=5
-  - pyqtgraph=0.13.7
-  - numpy>2.0
-  - scipy>1.13
-  - numba
-  - matplotlib
   - pip:
+      - numpy
+      - scipy
+      - matplotlib
+      - PyQt5
+      - pyqtgraph
       - h5py
       - qdarkstyle
       - qimage2ndarray
       - moderngl
+      - opencv-python

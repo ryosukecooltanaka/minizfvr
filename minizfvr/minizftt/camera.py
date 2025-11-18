@@ -16,9 +16,16 @@ try:
 except ImportError:
     pass
 
+try:
+    """
+    Note: AVT has released newer version of SDK and python APIs associated.
+    I am using older version because I am too lasy to reinstall SDK
+    """
+    from pymba import Vimba
+except ImportError:
+    pass
 
-
-class Camera():
+class Camera:
     """
     Camera object archetype
     Camera acquisition will be delegated to a child process using the multiprocessing module.
@@ -106,6 +113,51 @@ class PointGreyCamera(Camera):
         del self.camera  # this is required for system release
         self.system.ReleaseInstance()
 
+class AVTCamera(Camera):
+    """
+    AVT Camera. Uses Vimba SDK and its python wrapper.
+    There is a newer SDK (Vimba X). If you are going to actually
+    use AVT camera for real experiments, consider reimplementing
+    this with the new SDK.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__()
+        self.vimba = None
+        self.frame = None
+
+    def initialize(self, **kwargs):
+        # Copied over from stytra -- read it carefully at some point!
+        self.vimba = Vimba()
+        self.vimba.startup()
+        self.camera = self.vimba.camera(0)
+        self.camera.open()
+        self.frame = self.camera.new_frame()
+        self.frame.announce()
+        self.camera.start_capture()
+        self.frame.queue_for_capture()
+        self.camera.run_feature_command("AcquisitionStart")
+
+    def fetch_image(self):
+        self.frame.wait_for_capture(1000)
+        self.frame.queue_for_capture()
+        raw_data = self.frame.buffer_data()
+        frame = np.ndarray(
+            buffer=raw_data,
+            dtype=np.uint8,
+            shape=(self.frame.data.height, self.frame.data.width),
+        )
+        return True, frame, time.perf_counter()
+
+    def close(self):
+        """
+        Called from main window close event.
+        """
+        self.frame.wait_for_capture(1000)
+        self.camera.run_feature_command("AcquisitionStop")
+        self.camera.end_capture()
+        self.camera.revoke_all_frames()
+        self.vimba.shutdown()
 
 class DummyCamera(Camera):
     """
@@ -148,6 +200,8 @@ def SelectCameraByName(camera_name, **kwargs):
     """
     if camera_name=='pointgrey':
         camera = PointGreyCamera()
+    elif camera_name=='avt':
+        camera = AVTCamera()
     elif camera_name=='dummy':
         camera = DummyCamera(**kwargs)
     else:
