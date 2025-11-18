@@ -111,6 +111,10 @@ class SceneEngine:
         self.objects = [] # object is dependent on shader and texture, so make this last
 
     def add_shader(self, path, primitive_type=moderngl.TRIANGLES):
+        """
+        Given the path to the folder containing .glsl files for the shaders,
+        create a wrapped shader object
+        """
         self.shaders.append(WrappedShader(self.ctx, path, primitive_type))
 
     def add_texture(self, bitmap):

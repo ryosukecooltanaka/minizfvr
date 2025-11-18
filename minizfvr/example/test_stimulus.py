@@ -65,6 +65,11 @@ class TestStim(StimulusGenerator):
         return [wave]
 
 
+"""
+This is the part that will be executed as you call this file as a script.
+"""
 if __name__ == "__main__":
+    # Instantiate custom stim generator
     stimulus_generator = TestStim()
+    # Instantiate the StimulusApp, passing the stim generator
     StimulusApp(stimulus_generator, is_panorama=False)
