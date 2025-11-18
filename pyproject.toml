@@ -1,0 +1,8 @@
+[project]
+name = "minizfvr"
+version = "0.1.0"
+authors = [
+    {name = "Ryosuke Tanaka"}
+]
+description = 'minimal virtual reality for zebrafish'
+readme = 'README.md'
