@@ -6,8 +6,9 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QLabel
 )
-from PyQt5.QtCore import pyqtSignal
-from PyQt5.QtGui import QWheelEvent
+from PyQt5.QtCore import pyqtSignal, QSize
+from PyQt5.QtGui import QWheelEvent, QIcon
+from pathlib import Path
 
 def center_of_mass_based_tracking(img, base, tip, n_seg, search_radius):
     """
@@ -306,3 +307,13 @@ def parse_glsl(text, qualifier):
 
                 out.append((words[2], var_length))
     return out
+
+def set_icon(widget):
+    """
+    Set icon to widgets
+    """
+    app_icon = QIcon()  # a holder for icons
+    for size in [32, 64, 128]:
+        app_icon.addFile(str(Path(__file__).resolve().parent / 'assets' / 'icon_{}.png'.format(size)),
+                         QSize(size, size))
+    widget.setWindowIcon(app_icon)

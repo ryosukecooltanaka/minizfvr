@@ -1,4 +1,4 @@
-from ..utils import TypeForcedEdit, bistateButton
+from ..utils import TypeForcedEdit, bistateButton, set_icon
 import numpy as np
 from PyQt5.QtCore import Qt, QPointF, pyqtSignal
 from PyQt5.QtWidgets import (
@@ -86,6 +86,10 @@ class PanelTemplate(QWidget):
     # This event allows the other parts of the program know if the panels are open
     # Used to show/hide calibration frames on the StimulusWIndow
     panelOpenStateChanged = pyqtSignal(bool)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        set_icon(self)
 
     def toggle_visibility(self):
         if self.isVisible():

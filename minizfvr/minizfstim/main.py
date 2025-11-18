@@ -1,11 +1,13 @@
 import sys
 import time
+from pathlib import Path
 
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QSize
 from PyQt5.QtWidgets import (
     QApplication,
     QMainWindow,
 )
+from PyQt5.QtGui import QIcon
 
 import qdarkstyle
 
@@ -15,6 +17,7 @@ from .panels import StimulusControlPanel
 from ..communication import Receiver
 from .estimator import Estimator
 from .saver import Saver
+from ..utils import set_icon
 
 class StimulusApp:
     """
@@ -68,6 +71,7 @@ class StimulusControlWindow(QMainWindow):
         self.move(350, 50)
         self.setFixedSize(200, 300)
         self.setWindowTitle('minizfstim')
+        set_icon(self)
 
         ## State flags, handles, and timestamps
         self.stimulus_running = False

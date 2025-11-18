@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from qimage2ndarray import array2qimage
-from ..utils import roundButton
+from ..utils import roundButton, set_icon
 from .parameters import StimParamObject
 
 class StimulusWindow(QWidget):
@@ -16,6 +16,7 @@ class StimulusWindow(QWidget):
         self.setWindowTitle('Stimulus Window')
         self.setGeometry(corner[0], corner[1], 500, 500)
         self.setStyleSheet("background-color: black;")
+        set_icon(self)
 
         # reference to parent parameters (= it is synchronized -- we are not copying anything)
         self.param = param

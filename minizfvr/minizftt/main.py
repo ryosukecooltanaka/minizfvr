@@ -20,10 +20,10 @@ import numpy as np
 import sys
 import multiprocessing as mp
 from multiprocessing import shared_memory
-from queue import Empty
+from pathlib import Path
 import time
 
-from PyQt5.QtCore import QTimer
+from PyQt5.QtCore import QTimer, QSize
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -31,10 +31,11 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QLabel
 )
+from PyQt5.QtGui import QIcon
 
 import qdarkstyle
 
-from ..utils import decode_array_to_frame
+from ..utils import decode_array_to_frame, set_icon
 from .camera import SelectCameraByName
 from .panels import CameraPanel, AnglePanel, ControlPanel
 from .tracker import TrackerObject
@@ -156,6 +157,7 @@ class MiniZFTT(QMainWindow):
         # set window title and size
         self.setWindowTitle("minizftt")  # window title
         self.setGeometry(50, 50, 400, 600)  # default window position and size (x, y, w, h)
+        set_icon(self)
 
         # Insert initial values from config into control panel GUI by passing the parameter object
         self.control_panel.refresh_gui(self.param)
