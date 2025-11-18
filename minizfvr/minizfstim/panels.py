@@ -61,8 +61,8 @@ class StimulusControlPanel(QWidget):
         self.metadata_panel = MetadataPanel(None, param=param)
 
         # Button click opens sub-panels
-        self.calibrate_button.clicked.connect(self.calibration_panel.show)
-        self.metadata_button.clicked.connect(self.metadata_panel.show)
+        self.calibrate_button.clicked.connect(self.calibration_panel.toggle_visibility)
+        self.metadata_button.clicked.connect(self.metadata_panel.toggle_visibility)
 
         # Parameter change triggers GUI refresh (for both subpanels)
         self.param.paramChanged.connect(self.refresh_gui)
@@ -78,8 +78,30 @@ class StimulusControlPanel(QWidget):
         self.calibration_panel.close()
         self.metadata_panel.close()
 
+class PanelTemplate(QWidget):
+    """
+    Implementing shared behaviors of the parameter sub-panels here and make children inherit
+    """
 
-class CalibrationPanel(QWidget):
+    # This event allows the other parts of the program know if the panels are open
+    # Used to show/hide calibration frames on the StimulusWIndow
+    panelOpenStateChanged = pyqtSignal(bool)
+
+    def toggle_visibility(self):
+        if self.isVisible():
+            self.close()
+        else:
+            self.show()
+
+    def showEvent(self, event):
+        """ Let other parts of the program know that this panel opened """
+        self.panelOpenStateChanged.emit(True)
+
+    def closeEvent(self, event):
+        """ Let other parts of the program know that this panel opened """
+        self.panelOpenStateChanged.emit(False)
+
+class CalibrationPanel(PanelTemplate):
     """
     Sub-window for the StimulusControlPanel
     Here you will specify the position and the size of the paint area
@@ -92,7 +114,7 @@ class CalibrationPanel(QWidget):
     # which does paints and the CalibrationPanel are not in the direct parent-child relationship, to communicate
     # the state of CalibrationPanel, we send signals whenever the visibility of this panel changes, and we
     # connect them to a method that toggle the visibility of the frame. Signals are defined as class attributes.
-    panelOpenStateChanged = pyqtSignal(bool)
+
 
     def __init__(self, *args, param, **kwargs):
         super().__init__(*args, **kwargs)
@@ -195,16 +217,7 @@ class CalibrationPanel(QWidget):
 
         self.param.paramChanged.emit() # emit signal -> call gui refresh
 
-    def showEvent(self, event):
-        """ Let other parts of the program know that this panel opened """
-        self.panelOpenStateChanged.emit(True)
-
-    def closeEvent(self, event):
-        """ Let other parts of the program know that this panel opened """
-        self.panelOpenStateChanged.emit(False)
-
-
-class MetadataPanel(QWidget):
+class MetadataPanel(PanelTemplate):
     """
     Sub-window for the StimulusControlPanel
     Here you will specify the animal metadata

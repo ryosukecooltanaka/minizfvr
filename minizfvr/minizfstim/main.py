@@ -67,6 +67,7 @@ class StimulusControlWindow(QMainWindow):
         super().__init__()
         self.move(350, 50)
         self.setFixedSize(200, 300)
+        self.setWindowTitle('minizfstim')
 
         ## State flags, handles, and timestamps
         self.stimulus_running = False
@@ -245,10 +246,11 @@ class StimulusControlWindow(QMainWindow):
 
             # show how much time it takes to do the single stimulus update
             if self.ii % 50 == 0:
-                self.ui.message_line.setText('Set rate {0:}Hz / Duty {1:0.1%}'.format(
+                self.ui.message_line.setText('Duty {0:0.0%} / {1} Hz - done in {2:0.0f} s'.format(
+                    (time.perf_counter() - t_this_loop_start) / self.timer.interval() * 1000,
                     self.param.frame_rate,
-                    (time.perf_counter() - t_this_loop_start)/self.timer.interval()*1000)
-                )
+                    self.stimulus_generator.duration - t_now
+                ))
                 self.ii = 0
             self.ii += 1
 
