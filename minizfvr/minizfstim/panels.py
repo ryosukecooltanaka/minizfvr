@@ -36,8 +36,10 @@ class StimulusControlPanel(QWidget):
         self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C')
         self.calibrate_button = QPushButton('Calibrate')
         self.metadata_button = QPushButton('Metadata')
-        self.save_stim_check = QCheckBox('stim.')
-        self.save_tail_check = QCheckBox('tail')
+        self.save_stim_check = QCheckBox('Save stim.')
+        self.save_tail_check = QCheckBox('Save tail')
+        self.trigger_check = QCheckBox('Trigger')
+
         self.message_line = QLabel('')
         buttons = (self.start_button, self.reset_button, self.connect_button, self.calibrate_button, self.metadata_button)
 
@@ -47,9 +49,11 @@ class StimulusControlPanel(QWidget):
             button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
             button.setStyleSheet('font: bold 14px;')
             layout.addWidget(button, i, 0, 1, 3)
-        layout.addWidget(QLabel('Save'), 5, 0, 1, 1)
-        layout.addWidget(self.save_stim_check, 5, 1, 1, 1)
-        layout.addWidget(self.save_tail_check, 5, 2, 1, 1)
+
+        # Stuff other than buttons
+        layout.addWidget(self.save_stim_check, 5, 0, 1, 1)
+        layout.addWidget(self.save_tail_check, 5, 1, 1, 1)
+        layout.addWidget(self.trigger_check, 5, 2, 1, 1)
         layout.addWidget(self.message_line, 6, 0, 1, 3)
 
         layout.setRowMinimumHeight(0, 80)

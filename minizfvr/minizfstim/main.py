@@ -14,7 +14,7 @@ import qdarkstyle
 from .parameters import StimParamObject
 from .stim_window import StimulusWindow
 from .panels import StimulusControlPanel
-from ..communication import Receiver
+from ..communication import Receiver, wait_trigger_from_sidewinder
 from .estimator import Estimator
 from .saver import Saver
 from ..utils import set_icon
@@ -69,7 +69,7 @@ class StimulusControlWindow(QMainWindow):
         ## Call the parental (QMainWindow) constructor
         super().__init__()
         self.move(350, 50)
-        self.setFixedSize(200, 300)
+        self.setFixedSize(300, 300)
         self.setWindowTitle('minizfstim')
         set_icon(self)
 
@@ -169,6 +169,12 @@ class StimulusControlWindow(QMainWindow):
                 self.param,
                 self.stimulus_generator
             )
+
+            if self.ui.trigger_check.isChecked():
+                # Wait for trigger
+                # TODO: Make this customizable from the config file, according to whatever microscope expects
+                if not wait_trigger_from_sidewinder(duration=self.stimulus_generator.duration, port=self.param.tcp_port):
+                    return
 
             print('Starting stimulus')
         else:
