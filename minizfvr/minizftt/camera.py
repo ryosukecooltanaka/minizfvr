@@ -4,14 +4,19 @@ Not sure if I should implement acquisition control from python -- maybe we shoul
 """
 
 import numpy as np
-import PySpin
 import cv2
 import time
 import multiprocessing as mp
 from multiprocessing import shared_memory
 from ..utils import encode_frame_to_array
 
-# todo: implement some basic camera controls, especially exposure
+# Camera APIs (not every machine has the API package installed, hence try)
+try:
+    import PySpin
+except ImportError:
+    pass
+
+
 
 class Camera():
     """
