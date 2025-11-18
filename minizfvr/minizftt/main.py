@@ -154,7 +154,7 @@ class MiniZFTT(QMainWindow):
         Arrange panels into a single container in the main window
         """
         # set window title and size
-        self.setWindowTitle("minizftt_dev v01")  # window title
+        self.setWindowTitle("minizftt")  # window title
         self.setGeometry(50, 50, 400, 600)  # default window position and size (x, y, w, h)
 
         # Insert initial values from config into control panel GUI by passing the parameter object
