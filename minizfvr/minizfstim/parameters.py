@@ -46,7 +46,7 @@ class StimulusAppParams(BaseParams):
 
     # communication: make sure they are the same across tracker and stim
     localhost_port: int = 6000 # for local communication with the tail tracker
-    tcp_port: str = 'tcp://0.0.0.0:0000' # for communication with microscope over zmq
+    tcp_port: int = 5555 # for communication with microscope over zmq
 
 class StimParamObject(QObject, StimulusAppParams):
     """

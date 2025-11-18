@@ -61,7 +61,7 @@ class Receiver(QObject):
             self.conn.close()
 
 
-def wait_trigger_from_sidewinder(duration, port: str):
+def wait_trigger_from_sidewinder(duration, port: int):
     """
     If the 'wait trigger' is checked, we call this function
     and wait until we get a trigger from a microscope (running sidewinder).
@@ -76,10 +76,11 @@ def wait_trigger_from_sidewinder(duration, port: str):
     ctx = zmq.Context()
 
     # next, create a socket
-    with ctx.socket(zmq.REQ) as socket:
+    with ctx.socket(zmq.REP) as socket:
         # configure socket
         socket.setsockopt(zmq.LINGER, 0) # prevent indefinite hanging
-        socket.bind(port)
+        socket.bind("tcp://*:{}".format(port))
+        socket.setsockopt(zmq.RCVTIMEO, -1)
 
         # Now, trigger is first sent by the scope, so we create a poller and wait
         poller = zmq.Poller()
