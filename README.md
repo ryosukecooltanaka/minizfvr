@@ -1,4 +1,5 @@
-# minizfvr: minimal virtual reality for zebrafish
+# minizfvr: minimal virtual reality for zebrafish 
+![icon](./minizfvr/assets/icon.svg)
 
 A stab at a portable software for a tail-based 3D VR
 
