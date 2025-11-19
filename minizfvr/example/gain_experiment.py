@@ -69,7 +69,6 @@ class GainExperiment(StimulusGenerator):
         Receive timestamp, scale info, and closed loop information from the main app
         Return the stimulus frame
         """
-
         # Register inputs and manage timestamp
         dt = t - self.last_t
         self.last_t = t

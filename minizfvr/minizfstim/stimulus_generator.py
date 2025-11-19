@@ -43,6 +43,14 @@ class StimulusGenerator(QObject):
         """
         pass
 
+    def reset(self):
+        """
+        This will be called at start/stop of the stimulus
+        If your stimulus depends on history of timestamps, you probably want to clear them when you start/stop them,
+        which you can implement here
+        """
+        pass
+
     def save_metadata(self, save_file_path):
         """
         dump all attributes as a json

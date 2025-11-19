@@ -195,6 +195,7 @@ class StimulusControlWindow(QMainWindow):
         """
         Reset button callback (do I need this?)
         """
+        self.stimulus_generator.reset()
         self.stimulus_window.show()
         self.t0 = time.perf_counter()
         self.t0_tail = None
