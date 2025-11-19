@@ -172,7 +172,8 @@ class StimulusControlWindow(QMainWindow):
             )
 
             # save stimulus metadata
-            self.stimulus_generator.save_metadata(self.saver.run_path / 'stim_metadata.json')
+            if self.saver.save_stim_flag:
+                self.stimulus_generator.save_metadata(self.saver.run_path / 'stim_metadata.json')
 
             if self.ui.trigger_check.isChecked():
                 # Wait for trigger
