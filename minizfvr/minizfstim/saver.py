@@ -24,6 +24,10 @@ class Saver:
         self.tail_file = None
         self.stim_file = None
 
+        # also keep path, so we can save metadatas and stuff in the same folder
+        self.fish_path = None
+        self.run_path = None
+
         # attributes to store buffer (we buffer incoming stream of data into lists, and save only once in a while
         # because saving every loop is probably slow
         self.buffer_size = buffer_size
@@ -64,6 +68,8 @@ class Saver:
 
         fish_path = base_path / fish_name
         run_path = fish_path / run_name
+        self.fish_path = fish_path
+        self.run_path = run_path
 
         for p in (fish_path, run_path):
             if not p.exists():

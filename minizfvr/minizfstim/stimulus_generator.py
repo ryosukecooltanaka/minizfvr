@@ -1,5 +1,7 @@
 import numpy as np
 from PyQt5.QtCore import QObject, pyqtSignal
+import json
+from pathlib import Path
 
 class StimulusGenerator(QObject):
     """
@@ -40,3 +42,11 @@ class StimulusGenerator(QObject):
         In case you need to close handles for some externals, do it so here
         """
         pass
+
+    def save_metadata(self, save_file_path):
+        """
+        dump all attributes as a json
+        """
+        print('saving metadata')
+        with open(save_file_path, 'w', encoding='utf-8') as f:
+            json.dump(self.__dict__, f, ensure_ascii=False, indent=2, default=lambda o: '<not serializable>')

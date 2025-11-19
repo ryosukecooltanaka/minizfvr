@@ -163,12 +163,16 @@ class StimulusControlWindow(QMainWindow):
         Start button callback.
         Primarily it just switches saving flag on/off.
         """
-        if not self.stimulus_running:
+        if not self.stimulus_running: # start
+
             # prepare saving files (if necessary)
             self.saver.initialize(
                 self.param,
                 self.stimulus_generator
             )
+
+            # save stimulus metadata
+            self.stimulus_generator.save_metadata(self.saver.run_path / 'stim_metadata.json')
 
             if self.ui.trigger_check.isChecked():
                 # Wait for trigger
@@ -177,10 +181,11 @@ class StimulusControlWindow(QMainWindow):
                     return
 
             print('Starting stimulus')
-        else:
+        else: # stop
             self.saver.finalize()
             print('Stopping stimulus')
 
+        # toggle (things we can do agnostic which way)
         self.stimulus_running = not self.stimulus_running
         self.ui.start_button.force_state(self.stimulus_running) # update the button
         self.reset_stimulus() # reset timestamp, show the window (if not shown)
