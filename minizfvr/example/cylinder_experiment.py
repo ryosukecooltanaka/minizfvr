@@ -143,7 +143,8 @@ class CylinderExperiment(StimulusGenerator):
         self.reafference = self.last_bias * np.exp(-(t-self.t_last_bout)/self.tau_theta) / self.tau_theta
 
         dtheta = (self.exafference - self.reafference) * dt
-        self.theta += dtheta
+        if not np.isnan(dtheta):
+            self.theta += dtheta
 
 
         # move the thing

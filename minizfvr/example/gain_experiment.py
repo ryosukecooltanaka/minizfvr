@@ -37,9 +37,6 @@ class GainExperiment(StimulusGenerator):
         self.wave_length = 10.0 # mm
         self.flow_velocity = 10.0 # mm/s
 
-
-
-
         # it is important to initialize these in the correct types, as saving routine check the type of initial
         # values and prepare save files accordingly
         self.y_displacement = 0.0
@@ -87,7 +84,6 @@ class GainExperiment(StimulusGenerator):
         else:
             self.gain = 1.0
 
-
         # TODO: Maybe this should be somehow referenced from the estimator?
         # 30 is a hard-coded baseline gain to convert tail angle std to mm/s
         is_in_bout = vigor > 0.05
@@ -96,7 +92,8 @@ class GainExperiment(StimulusGenerator):
 
         # y movement in this frame (in mm)
         dy = (self.exafference_speed - self.reafference_speed) * dt
-        self.y_displacement += dy
+        if not np.isnan(dy):
+            self.y_displacement += dy
 
         # the "phase map" ranges from 0 to 1, so you can just multiply it
         # paint area (in mm) to get correct mm readout
