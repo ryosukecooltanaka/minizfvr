@@ -42,7 +42,14 @@ def center_of_mass_based_tracking(img, base, tip, n_seg, search_radius):
         # tip finding function will return negative bx if there is anything wrong
         if bx<0:
             break
-        angles[i] = np.arctan2(dx, dy)
+        # find segment angle with arctan2, but we need to be careful for the PI-crossing
+        if i==0:
+            angles[i] = np.arctan2(dx, dy)
+        else:
+            # this should constrain the angle difference between the two consequtive segment
+            # witin -pi to +pi range
+            d_angle = ((np.arctan2(dx, dy) - angles[i-1] + np.pi)%(np.pi*2.0)) - np.pi
+            angles[i] = angles[i-1] + d_angle
         segments[:, i+1] = (bx, by)
 
     return segments, angles

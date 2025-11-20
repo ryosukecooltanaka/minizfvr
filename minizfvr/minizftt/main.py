@@ -297,7 +297,6 @@ class MiniZFTT(QMainWindow):
         # the intensity center-of-mass can "go back" on the actual tail
         seg_length_px = np.sqrt((self.param.tip_x - self.param.base_x)**2 + (self.param.tip_y - self.param.base_y)**2) / self.param.n_segments
         self.param.search_area = min(15, int(np.floor(seg_length_px)))
-        print(self.param.search_area)
 
 
         # Insert the new values to the parameter object
