@@ -279,6 +279,7 @@ class MiniZFTT(QMainWindow):
             tail_rescale_factor = new_iscale / self.param.image_scale
 
         # In the param object, we keep the tail standard positions in the rescaled image pixel coordinate
+        # (i.e., the one that can be directly used for tracking, rather htan visualization)
         # We need to update these, if (a) the tail standard was moved from the GUI, (b) image scale was changed
 
         # account for image scale change
@@ -290,6 +291,14 @@ class MiniZFTT(QMainWindow):
         base, tip = self.camera_panel.get_base_tip_position(tail_param_scale_factor)
         self.param.base_x, self.param.base_y = base
         self.param.tip_x, self.param.tip_y = tip
+
+        # Also, we want to adapt the search area size to the tail standard length,
+        # because when the search area is too big (say, bigger than each segment)
+        # the intensity center-of-mass can "go back" on the actual tail
+        seg_length_px = np.sqrt((self.param.tip_x - self.param.base_x)**2 + (self.param.tip_y - self.param.base_y)**2) / self.param.n_segments
+        self.param.search_area = min(15, int(np.floor(seg_length_px)))
+        print(self.param.search_area)
+
 
         # Insert the new values to the parameter object
         self.param.show_raw = new_sr
