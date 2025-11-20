@@ -75,6 +75,8 @@ class CylinderExperiment(StimulusGenerator):
         self.last_t = 0.0
         self.t_last_bout = 0.0
         self.last_bias = 0.0
+        self.last_switch_t = 0.0
+        self.this_epoch_duration = 0.0
 
     def initialize_scene_engine(self):
         """
@@ -129,7 +131,7 @@ class CylinderExperiment(StimulusGenerator):
             self.last_switch_t = t
             self.this_epoch_duration = np.random.randint(1,9)
             if self.exafference == 0:
-                sign = np.random.randint(2) - 1
+                sign = np.random.randint(2)*2 - 1
                 self.exafference = sign * self.omega / 180 * np.pi
             else:
                 self.exafference = 0
