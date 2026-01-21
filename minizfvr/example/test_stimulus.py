@@ -17,6 +17,8 @@ class TestStim(StimulusGenerator):
 
     def __init__(self):
         super().__init__()
+        self.duration = 60.0
+
         self.xx, self.yy = np.meshgrid(np.linspace(-0.5, 0.5, 100), np.linspace(-0.5, 0.5, 100))
         self.phi = np.arctan2(self.yy, self.xx)
 
@@ -37,6 +39,14 @@ class TestStim(StimulusGenerator):
         )
         self.last_t = 0
 
+    def reset(self):
+        # this will run when the reset button is pressed
+        # I think only things that would ever need a reset should be cumulative attributes
+        # because everything else would be overwritten
+        self.y_displacement = 0.0
+        self.phi_displacement = 0.0
+
+
     def draw_frame(self, t, paint_area_mm, vigor, bias):
         """
         draw_frame method will be called regularly, and is expected to return frames as a list of ndarrays
@@ -54,8 +64,12 @@ class TestStim(StimulusGenerator):
         wavelength_mm = 10
 
         # threshold to prevent continuous drifting & "baseline gain" to convert rad to mm/s
+        if np.isnan(vigor):
+            vigor = 0
         self.y_displacement -= (vigor * 30 * (vigor>0.1) - 5) * dt
-        self.phi_displacement -= bias * 3
+        
+        if not np.isnan(bias):
+            self.phi_displacement -= bias 
 
         linear_wave = np.cos((self.yy * h_mm + self.y_displacement) / wavelength_mm * 2.0 * np.pi)
         axial_wave = np.cos((self.phi + self.phi_displacement) * 16)
