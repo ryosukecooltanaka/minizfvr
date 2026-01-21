@@ -88,10 +88,10 @@ class PointGreyCamera(Camera):
     """
     def __init__(self, **kwargs):
         super().__init__()
+        
+    def initialize(self, **kwargs):
         self.system = PySpin.System.GetInstance()
         self.camera = self.system.GetCameras()[0]
-
-    def initialize(self, **kwargs):
         self.camera.Init()
         self.camera.BeginAcquisition()
 
