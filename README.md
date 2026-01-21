@@ -22,7 +22,7 @@ you implement compatible communication protocols on the other end.
 - Create a conda environment using the `environment.yml` file.
   - Note that camera APIs probably need to be separately installed for each manufacturer. 
 - Clone the repository to local.
-- Install the local repo as an editable (-e) package by running `python -m pip -e <path to repo>`
+- In the conda environment, install the local repo as an editable (-e) package by running `pip -e <path to repo>`
 
 ## Configuration
 The both applications will generate config files under the home directory on their 
