@@ -1,6 +1,10 @@
 from multiprocessing.connection import Client, Listener
 import zmq
 from PyQt5.QtCore import QObject, pyqtSignal
+try:
+    import u3
+except:
+    pass
 
 class Receiver(QObject):
     """
@@ -97,6 +101,28 @@ def wait_trigger_from_sidewinder(duration, port: int):
     ctx.term()
     ctx.destroy()
     return success
+
+def wait_trigger_from_u3(DIR_REG, STATE_REG):
+    '''
+    Read digital trigger through LabJack U3 from imaging softwares
+    '''
+    try:
+        d = u3.U3()
+        d.writeRegister(DIR_REG, 0) # set the register to digital input
+        print('Start waiting for a trigger from U3 port={}'.format(STATE_REG))
+        while 1:
+            if d.readRegister(STATE_REG):
+                print('trigger received')
+                d.close()
+                return 0
+
+    except Exception as e:
+        print('an error occured ', e)
+        print('ignoring trigger, starting stimulus')
+        return 1
+
+
+
 
 
 
