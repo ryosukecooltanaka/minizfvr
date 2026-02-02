@@ -33,6 +33,9 @@ uniform vec2 clip_z; // (near, far), both positive! (distance, not coordinate)
 
 // Rotation about each axis (model transform)
 
+// Because the viewing transform matrix defined below is right-handed, the rotation matrices below
+// rotate the model CCW, given positive angle, viewed from positive end of the axis
+
 mat3 aboutX(){
     return mat3(
         1, 0,          0,
@@ -61,8 +64,8 @@ mat3 aboutZ(){
 
 mat4 lookat(){
     // First, define axes as necessary
-    vec3 view_z = -normalize(gaze - camera); // camera points negative Z!
-    vec3 view_x = normalize(cross(up, view_z)); // right hand rule!
+    vec3 view_z = -normalize(gaze - camera); // negative of the view vector is the Z axis after viewing transform
+    vec3 view_x = normalize(cross(up, view_z)); // right hand rule: (up is thumb, view is index, so x is middle)
     vec3 view_y = cross(view_z, view_x); // recalculate up so it is orthogonal to both Z/X
 
     return mat4(
