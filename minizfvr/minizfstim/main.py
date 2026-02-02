@@ -14,7 +14,7 @@ import qdarkstyle
 from .parameters import StimParamObject
 from .stim_window import StimulusWindow
 from .panels import StimulusControlPanel
-from ..communication import Receiver, wait_trigger_from_sidewinder
+from ..communication import Receiver, wait_trigger_from_sidewinder, wait_trigger_from_u3
 from .estimator import Estimator
 from .saver import Saver
 from ..utils import set_icon
@@ -86,7 +86,7 @@ class StimulusControlWindow(QMainWindow):
 
         ## Create a parameter object & load config
         self.param = StimParamObject(self) # this is a hybrid of a dataclass and QObject -- it can emit signals
-        self.param.load_config_from_json(self.param.config_path)
+        self.param.load_config_from_json(self.param.config_path, force=True)
         self.param.is_panorama = is_panorama # this param should be dictated by each stimulus generator
 
         ## Prepare a receiver object that listens to the tail tracking data & attempt the connection
@@ -177,9 +177,11 @@ class StimulusControlWindow(QMainWindow):
 
             if self.ui.trigger_check.isChecked():
                 # Wait for trigger
-                # TODO: Make this customizable from the config file, according to whatever microscope expects
-                if not wait_trigger_from_sidewinder(duration=self.stimulus_generator.duration, port=self.param.tcp_port):
-                    return
+                if self.param.trigger_source == 'sidewinder':
+                    if not wait_trigger_from_sidewinder(duration=self.stimulus_generator.duration, port=self.param.tcp_port):
+                        return # abort experiment if triggering fails
+                elif self.param.trigger_source == 'u3':
+                    wait_trigger_from_u3(self.param.u3_direction_register, self.param.u3_state_register)
 
             print('Starting stimulus')
         else: # stop
