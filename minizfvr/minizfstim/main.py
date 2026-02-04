@@ -199,6 +199,7 @@ class StimulusControlWindow(QMainWindow):
         """
         self.stimulus_generator.reset()
         self.stimulus_window.show()
+        self.stimulus_window.black_out()
         self.t0 = time.perf_counter()
         self.t0_tail = None
 

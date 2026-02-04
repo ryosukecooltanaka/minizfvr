@@ -6,6 +6,7 @@ from PyQt5.QtWidgets import (
 from qimage2ndarray import array2qimage
 from ..utils import roundButton, set_icon
 from .parameters import StimParamObject
+import numpy as np
 
 class StimulusWindow(QWidget):
     """
@@ -26,9 +27,9 @@ class StimulusWindow(QWidget):
             self.canvas = [PaintCanvas(parent=self)]
         else:
             self.canvas = [
-                PaintCanvas(parent=self, rotation=-90, invert=True, screen_name='L', screen_color=(200, 30, 30)),
-                PaintCanvas(parent=self, rotation=0,   invert=True, screen_name='F', screen_color=(30, 200, 30)),
-                PaintCanvas(parent=self, rotation=+90, invert=True, screen_name='R', screen_color=(30, 30, 200))
+                PaintCanvas(parent=self, rotation=-90, invert=True, screen_name='L', screen_color=(200, 30, 30)),  
+                PaintCanvas(parent=self, rotation=0,   invert=True, screen_name='F', screen_color=(200, 200, 30)),
+                PaintCanvas(parent=self, rotation=+90, invert=True, screen_name='R', screen_color=(200, 30, 200))
             ]
         self.adjust_canvas()
 
@@ -90,6 +91,17 @@ class StimulusWindow(QWidget):
         for this_frame, canvas in zip(frame, self.canvas):
             canvas.frame = this_frame
             canvas.repaint(0, 0, canvas.width(), canvas.height()) # just to be explicit... prob. doesn't matter
+
+    def black_out(self):
+        """
+        Put dark image onto the all canvases
+        Called at stimulus reset so that things will not remain on the screen when stopped
+        """
+        for canvas in self.canvas:
+            canvas.frame = np.zeros((10, 10, 3)).astype(np.uint8)
+            canvas.repaint(0, 0, canvas.width(), canvas.height())
+
+
 
     def toggle_calibration_frame(self, state):
         """ As we open/close the calibration panel (under ui),
