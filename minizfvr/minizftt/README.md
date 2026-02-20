@@ -5,6 +5,8 @@
 `minizftt` sends the result of tracking through a named pipe, using `multiprocessing.connection`.
 `minizftt` is designed with `minizfstim` in mind, but any other app, custom-written or otherwise, can perform closed loop stimulation in so far as it listens to the named pipe.
 
+The center-of-mass-based algorithm for the tail tracking is mostly identical to what [stytra](https://github.com/portugueslab/stytra) (Štih et al. 2019: [link to the paper](https://journals.plos.org/ploscompbiol/article?id=10.1371/journal.pcbi.1006699)) uses.
+
 ## multiprocessing
 To leverage multi-core CPUs and minimize the lag between frame acquisition and tail tracking, `minizftt` utilizes the `multiprocessing`.
 The main GUI application will spawn two child processes: One process would be running frame acquisition with a while loop, and the other would be performing the tail tracking algorithm. 
