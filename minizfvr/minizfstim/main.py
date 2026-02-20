@@ -195,7 +195,8 @@ class StimulusControlWindow(QMainWindow):
 
     def reset_stimulus(self):
         """
-        Reset button callback (do I need this?)
+        Reset button callback
+        This is called everytime stimulus starts/stops
         """
         self.stimulus_generator.reset()
         self.stimulus_window.show()
@@ -219,7 +220,14 @@ class StimulusControlWindow(QMainWindow):
             if data is not None:
                 for this_data in data:
                     if self.t0_tail is None:
-                        self.t0_tail = this_data[0] # we want to keep the first tail time stamp
+                        # t0_tail is reset to None at every stimulus start and stop
+                        # Thus, we only reach here at the first call of stimulus_update()
+                        # after the stimulus start (given we are connected with the tracker).
+                        # Because the toggle_run_state() will wait for the trigger, the pipe
+                        # can have old data here. So, we will define the last sample as the
+                        # t0_tail (which makes sense -- we haven't even shown the first
+                        # frame of the stimulus here yet)
+                        self.t0_tail = this_data[-1] # we want to keep the first tail time stamp
                     self.estimator.register_new_data(*this_data)
         else:
             data = None
