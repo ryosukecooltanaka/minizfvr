@@ -140,8 +140,8 @@ class StimulusControlWindow(QMainWindow):
         self.ui.reset_button.clicked.connect(self.reset_stimulus)
 
         # When we click save checkboxes, update the save state flags in the saver (also pass the new state)
-        self.ui.save_tail_check.stateChanged.connect(lambda cs, is_tail=False: self.saver.toggle_states(cs, is_tail))
-        self.ui.save_stim_check.stateChanged.connect(lambda cs, is_tail=True: self.saver.toggle_states(cs, is_tail))
+        self.ui.save_tail_check.stateChanged.connect(lambda cs, is_tail=True: self.saver.toggle_states(cs, is_tail))
+        self.ui.save_stim_check.stateChanged.connect(lambda cs, is_tail=False: self.saver.toggle_states(cs, is_tail))
 
         # When stimulus is supposed to end, it emits a signal. We then stop the stimulus.
         self.stimulus_generator.durationPassed.connect(self.toggle_run_state)
