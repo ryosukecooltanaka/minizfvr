@@ -109,6 +109,7 @@ class StimulusControlWindow(QMainWindow):
         # prepare UI panels and set it on the main window
         self.ui = StimulusControlPanel(self.param) # pass reference to parameters
         self.setCentralWidget(self.ui)
+        self.ui.message_line.setText('Duration: {:0.0f} s'.format(self.stimulus_generator.duration))
 
         ## Create and start the timer for timed GUI updates
         self.timer = QTimer()
@@ -201,6 +202,7 @@ class StimulusControlWindow(QMainWindow):
         self.stimulus_generator.reset()
         self.stimulus_window.show()
         self.stimulus_window.black_out()
+        self.ui.message_line.setText('Stimulus Reset! Duration: {:0.0f} s'.format(self.stimulus_generator.duration))
         self.t0 = time.perf_counter()
         self.t0_tail = None
 
