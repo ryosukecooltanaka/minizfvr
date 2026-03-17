@@ -170,11 +170,7 @@ class StimulusControlWindow(QMainWindow):
             self.saver.initialize(
                 self.param,
                 self.stimulus_generator
-            )
-
-            # save stimulus metadata
-            if self.saver.save_stim_flag:
-                self.stimulus_generator.save_metadata(self.saver.run_path / 'stim_metadata.json')
+            )                
 
             if self.ui.trigger_check.isChecked():
                 # Wait for trigger
@@ -189,10 +185,16 @@ class StimulusControlWindow(QMainWindow):
             self.saver.finalize()
             print('Stopping stimulus')
 
+        self.reset_stimulus() # reset timestamp, show the window (if not shown)
+
+        # Metadata needs to be saved after stimulus reset! (for random seeds etc.)
+        if self.stimulus_running==False and self.saver.save_stim_flag:
+            self.stimulus_generator.save_metadata(self.saver.run_path / 'stim_metadata.json')
+
         # toggle (things we can do agnostic which way)
         self.stimulus_running = not self.stimulus_running
         self.ui.start_button.force_state(self.stimulus_running) # update the button
-        self.reset_stimulus() # reset timestamp, show the window (if not shown)
+        
 
     def reset_stimulus(self):
         """
