@@ -4,3 +4,4 @@
 *.json
 *.pyc
 minizfvr.egg-info/*
+*.avi
