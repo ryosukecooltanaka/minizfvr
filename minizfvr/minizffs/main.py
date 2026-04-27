@@ -96,15 +96,15 @@ class MiniZFFS(QMainWindow):
         self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
 
         # Memory for the history of the x, y position / angle and associated time stamps.
-        # length is decided by angle_trace_length parameter (x 8byte float x 4)
-        self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=32*self.param.angle_trace_length)
+        # length is decided by trace_length parameter (x 8byte float x 4)
+        self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=32*self.param.trace_length)
 
         ## Create numpy arrays that refers to the shared memory we allocated
         # For the raw and processed image frames, we store data as 1d array, because the shape of the frame can
         # dynamically change. We will reshape these 1d array into 2d whenever we need to perform operations on 2d.
         self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
-        self.tracking_history = np.ndarray((4, self.param.angle_trace_length), dtype=np.float64, buffer=self.tracking_memory.buf)
+        self.tracking_history = np.ndarray((4, self.param.trace_length), dtype=np.float64, buffer=self.tracking_memory.buf)
         self.tracking_history[:] = 0 # initialize
 
         ## Create Queues
@@ -286,16 +286,13 @@ class MiniZFFS(QMainWindow):
         if self.param.show_raw:
             tail_param_scale_factor *= self.param.image_scale
 
-        base, tip = self.camera_panel.get_area_spec(tail_param_scale_factor)
-        self.param.base_x, self.param.base_y = base
-        self.param.tip_x, self.param.tip_y = tip
+        pos, size = self.camera_panel.get_area_spec(tail_param_scale_factor)
+        self.param.roi_x, self.param.roi_y = pos
+        self.param.roi_w, self.param.roi_h = size
 
         # Also, we want to adapt the search area size to the tail standard length,
         # because when the search area is too big (say, bigger than each segment)
         # the intensity center-of-mass can "go back" on the actual tail
-        seg_length_px = np.sqrt((self.param.tip_x - self.param.base_x)**2 + (self.param.tip_y - self.param.base_y)**2) / self.param.n_segments
-        self.param.search_area = min(15, int(np.floor(seg_length_px)))
-
 
         # Insert the new values to the parameter object
         self.param.show_raw = new_sr

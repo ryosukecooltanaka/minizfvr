@@ -112,7 +112,7 @@ class TrackerObject():
                 encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
                 self.shared_arrays['tracking_history'][0, self.ii] = 0
                 self.shared_arrays['tracking_history'][1, self.ii] = timestamp
-                self.ii = (self.ii + 1) % self.param['angle_trace_length']
+                self.ii = (self.ii + 1) % self.param['trace_length']
 
             except Empty:
                 pass
@@ -142,7 +142,7 @@ class TrackerObject():
         self.shared_arrays = dict(
             current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
             current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
-            tracking_history   = np.ndarray((2, self.param['angle_trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf)
+            tracking_history   = np.ndarray((2, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf)
         )
 
     def send_angle_through_pipe(self, timestamp, d_angle):

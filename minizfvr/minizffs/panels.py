@@ -21,7 +21,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     It holds image from camera + tail standard + tracked tail
     """
 
-    def __init__(self, *args, rect_x=0, rect_y=0, rect_w=100, rect_h=100, **kwargs):
+    def __init__(self, *args, roi_x=0, roi_y=0, roi_w=100, roi_h=100, **kwargs):
 
         # The reason I am passing the input arguments to the constructor is 
         # so you can load last-used ROI settings from the config file.
@@ -36,7 +36,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         # The thing on which we put the image from the camera
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
         # ROI within which we look for fish
-        self.fish_area = pg.RectROI((rect_x, rect_y), (rect_w, rect_h))
+        self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h))
         # Thing to plot the tracked fish
         self.fish_tracked = pg.PlotCurveItem()
 
@@ -76,12 +76,11 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         When switching between showing raw and scaled images, keep the ROI in the same relative position.
         Also flag frame contrast adjustment.
         """
-        pos, size = self.get_area_spec()
+        pos, size = self.get_area_spec(f)
         print(pos, size)
-        #for h, pos in zip(self.tail_standard.handles, (base, tip)):
-        #    newPos = QPointF(*[val * f for val in pos])
-        #    h['item'].setPos(newPos) # copied over from pyqtgraph source code -- not sure why we need item/pos
-        #    h['pos']= newPos
+        self.fish_area.setPos(pos)
+        self.fish_area.setSize(size)
+
         self.level_adjust_flag = True
 
     def update_tracked_tail(self):

@@ -27,15 +27,13 @@ class FreeSwimmingParams(BaseParams):
     clip_threshold: int = 0
 
     # tracking algo parameters
-    base_x: float = 10.0  # in the post-rescaling coordinate
-    base_y: float = 10.0
-    tip_x: float = 100.0
-    tip_y: float = 100.0
-    n_segments: int = 7
-    search_area: int = 15
+    roi_x: float = 10.0  # in the post-rescaling coordinate
+    roi_y: float = 10.0
+    roi_w: float = 100.0
+    roi_h: float = 100.0
 
     # visualization related parameters
-    angle_trace_length: int = 1000
+    trace_length: int = 1000
 
     # communication: make sure they are the same across tracker and stim
     localhost_port: int = 6000
