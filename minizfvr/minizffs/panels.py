@@ -77,9 +77,8 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         Also flag frame contrast adjustment.
         """
         pos, size = self.get_area_spec(f)
-        print(pos, size)
-        self.fish_area.setPos(pos)
-        self.fish_area.setSize(size)
+        self.fish_area.setPos(pos, finish=False) # finish=False suppressses the sigRegionChangeFinished, so we don't go into loop
+        self.fish_area.setSize(size, finish=False)
 
         self.level_adjust_flag = True
 
