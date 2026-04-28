@@ -38,7 +38,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         # ROI within which we look for fish
         self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h), pen=dict(color=(5, 40, 200), width=3))
         # Thing to plot the tracked fish
-        self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(200, 40, 200), size=8)
+        self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(40,200,40), size=8)
         self.tracked_body = pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3))
 
         # connect everything
@@ -79,13 +79,23 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.fish_area.setSize(size, finish=False)
         self.level_adjust_flag = True
 
-    def update_tracked_tail(self, x, y, theta):
+    def update_tracked_tail(self, x, y, theta, scale):
         # This is just for the sake of visualization. Do it later
-        self.tracked_head.setData((x,), (y,))
-        body_x = np.asarray([0, -np.cos(theta)])*30 + x
-        body_y = np.asarray([0, -np.sin(theta)])*30 + y
-        self.tracked_body.setData(body_x, body_y)
+        if not np.isnan(x):
+            self.tracked_head.setData((x*scale,), (y*scale,))
+            body_x = np.asarray([0, -np.cos(theta)])*30 + x*scale
+            body_y = np.asarray([0, -np.sin(theta)])*30 + y*scale
+            self.tracked_body.setData(body_x, body_y)
+        else:
+            self.tracked_head.setData([])
+            self.tracked_body.setData([])
 
+    def switch_colormap(self, k: bool):
+        if k:
+            self.fish_image_item.setColorMap(pg.ColorMap((0,1), [(0,)*3,(255,)*3]))
+        else:
+            # in the order of BG, fish bounding box, body, head
+            self.fish_image_item.setColorMap(pg.ColorMap((0,0.5,1), [(127,127,127),(255,255,0),(0,0,127)]))
 
 class TracePanel(pg.GraphicsLayoutWidget):
     """
@@ -123,13 +133,16 @@ class ControlPanel(QWidget):
         # Prepare widgets that control the parameters
         # preprocessing parameters
         self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C') # attempt connection to the stimulus window
+        self.save_button = bistateButton('Save', t2='Stop', c1='#FFF', c2='#E6C') # attempt connection to the stimulus window
+        
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
+        self.show_bg_checkbox = QCheckBox('show bg') # if checked, show background image
+
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
         self.image_scale_box = TypeForcedEdit(float) # subclassed to only allow specific numeric types
 
         self.dilate_size_box = TypeForcedEdit(int)
         self.body_threshold_box = TypeForcedEdit(int)
-        self.head_threshold_box = TypeForcedEdit(int)
 
         self.arrange_widget()
 
@@ -143,23 +156,24 @@ class ControlPanel(QWidget):
         self.connect_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
         self.connect_button.setMinimumWidth(100)
         grid.addWidget(self.connect_button,        0, 0, 2, 1)
-        grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
-        grid.addWidget(self.color_invert_checkbox, 1, 1, 1, 1)
-        grid.addWidget(QLabel("Image Scale"),      0, 2, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.image_scale_box,       1, 2, 1, 1)
-        grid.addWidget(QLabel("Dilation Scale"),      0, 3, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.dilate_size_box,    1, 3, 1, 1)
-        grid.addWidget(QLabel("Body Threshold"),   0, 4, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.body_threshold_box, 1, 4, 1, 1)
-        grid.addWidget(QLabel("Head Threshold"),   0, 5, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.head_threshold_box, 1, 5, 1, 1)
-        
+        grid.addWidget(self.save_button,           2, 0, 1, 1)
 
+        grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
+        grid.addWidget(self.show_bg_checkbox,      1, 1, 1, 1) # row, col, rowspan, colspan
+        grid.addWidget(self.color_invert_checkbox, 2, 1, 1, 1)
+
+        grid.addWidget(QLabel("Image Scale"),      0, 2, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.image_scale_box,       0, 3, 1, 1)
+
+        grid.addWidget(QLabel("Dilation Scale"),   1, 2, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.dilate_size_box,       1, 3, 1, 1)
+
+        grid.addWidget(QLabel("Body Threshold"),   2, 2, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.body_threshold_box,    2, 3, 1, 1)
+        
         # Cosmetic size adjustment
         self.connect_button.setStyleSheet('font: bold 14px;')
-        self.image_scale_box.setMaximumWidth(50)
-        grid.setColumnStretch(3, 2)
-        grid.setColumnStretch(4, 2)
+        self.save_button.setStyleSheet('font: bold 14px;')
 
         self.setLayout(grid)
 
@@ -169,16 +183,16 @@ class ControlPanel(QWidget):
         """
         # Put the parameter received into the GUI
         self.show_raw_checkbox.setChecked(p.show_raw)
+        self.show_bg_checkbox.setChecked(p.show_bg)
         self.color_invert_checkbox.setChecked(p.color_invert)
         self.image_scale_box.setValue(p.image_scale)
         self.dilate_size_box.setValue(p.dilate_size)
         self.body_threshold_box.setValue(p.body_threshold)
-        self.head_threshold_box.setValue(p.head_threshold)
 
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\
+               self.show_bg_checkbox.isChecked(),\
                self.color_invert_checkbox.isChecked(),\
                self.image_scale_box.value(),\
                self.dilate_size_box.value(),\
-               self.body_threshold_box.value(), \
-               self.head_threshold_box.value()
+               self.body_threshold_box.value()

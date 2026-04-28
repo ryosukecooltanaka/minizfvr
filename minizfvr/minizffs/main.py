@@ -68,6 +68,7 @@ class MiniZFFS(QMainWindow):
 
         # Create other widgets & arrange them onto the main window
         self.camera_panel = CameraPanel(**self.param.__dict__)
+        self.camera_panel.switch_colormap(self.param.show_raw) # set colormap
         self.trace_panel = TracePanel()
         self.control_panel = ControlPanel()
         self.message_strip = QLabel()
@@ -184,14 +185,17 @@ class MiniZFFS(QMainWindow):
         events_to_trigger_param_refresh = (
             self.camera_panel.fish_area.sigRegionChangeFinished,
             self.control_panel.show_raw_checkbox.stateChanged,
+            self.control_panel.show_bg_checkbox.stateChanged,
             self.control_panel.color_invert_checkbox.stateChanged,
             self.control_panel.image_scale_box.editingFinished,
             self.control_panel.dilate_size_box.editingFinished,
-            self.control_panel.body_threshold_box.editingFinished,
-            self.control_panel.head_threshold_box.editingFinished
+            self.control_panel.body_threshold_box.editingFinished
         )
         for ettpr in events_to_trigger_param_refresh:
             ettpr.connect(self.refresh_param)
+
+        # Show the processed image with pseudocolor
+        self.control_panel.show_raw_checkbox.stateChanged.connect(lambda f : self.camera_panel.switch_colormap(f))
 
         ## If the parameter is changed, updated the control panel GUI
         # the paramChanged signal has a float argument for the tail rescaling factor (signified as f here)
@@ -227,8 +231,8 @@ class MiniZFFS(QMainWindow):
 
         # Tracked tail segment positions are in the pixel coordinate of the processed (potentially resized) images.
         # If we are showing the raw frame, we need to account for the resizing factor.
-        if self.param.show_raw:
-            factor = 1.0 / self.param.image_scale
+        if not self.param.show_raw:
+            factor = self.param.image_scale
         else:
             factor = 1.0
 
@@ -237,7 +241,7 @@ class MiniZFFS(QMainWindow):
             head_index = np.argmax(self.tracking_history[-1, :])
 
             ## Camera panel
-            self.camera_panel.update_tracked_tail(*self.tracking_history[(0, 1, 2), head_index])
+            self.camera_panel.update_tracked_tail(*self.tracking_history[(0, 1, 2), head_index], factor)
 
             ## Trace panel
             # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
@@ -267,7 +271,7 @@ class MiniZFFS(QMainWindow):
         """
 
         # Read the current content of the GUI widgets
-        new_sr, new_inv, new_iscale, new_dsize, new_bthresh, new_hthresh = self.control_panel.return_current_value()
+        new_sr, new_sb, new_inv, new_iscale, new_dsize, new_bthresh = self.control_panel.return_current_value()
 
         # Before overwriting the old parameters, check if we need to adjust the tail ROI
         # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
@@ -302,12 +306,12 @@ class MiniZFFS(QMainWindow):
 
         # Insert the new values to the parameter object
         self.param.show_raw = new_sr
+        self.param.show_bg = new_sb
         self.param.color_invert = new_inv
         self.param.image_scale = new_iscale
         self.param.dilate_size = new_dsize
         self.param.body_threshold = new_bthresh
-        self.param.head_threshold = new_hthresh
-
+        
         # Emit parameter change signal (will trigger GUI update)
         self.param.paramChanged.emit(tail_rescale_factor)
 

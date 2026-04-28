@@ -21,17 +21,21 @@ class FreeSwimmingParams(BaseParams):
 
     # image preprocessing parameters
     show_raw: bool = True
+    show_bg: bool = False
     image_scale: float = 1.0
     dilate_size: int = 3
     color_invert: bool = True
     body_threshold: int = 0
-    head_threshold: int = 0
 
     # tracking algo parameters
     roi_x: float = 10.0  # in the post-rescaling coordinate
     roi_y: float = 10.0
     roi_w: float = 100.0
     roi_h: float = 100.0
+
+    # background update
+    bg_alpha: float = 0.1
+    bg_update_px_thresh: int = 5
 
     # visualization related parameters
     trace_length: int = 1000
