@@ -4,7 +4,7 @@ import cv2
 from multiprocessing import shared_memory
 from multiprocessing.connection import Listener
 from queue import Empty
-from ..utils import preprocess_free_swimming_image, encode_frame_to_array, decode_array_to_frame
+from ..utils import detect_fish_body, encode_frame_to_array, decode_array_to_frame
 
 
 
@@ -109,23 +109,19 @@ class TrackerObject():
                     bg_image = bg_image + frame
 
                 # do the preprocessing
-                processed_frame = preprocess_free_swimming_image(frame, bg_image, **self.param)
-
+                body_frame = detect_fish_body(frame, bg_image, **self.param)
+                processed_frame = body_frame + cv2.threshold(cv2.subtract(bg_image, frame), self.param['head_threshold'], 100, cv2.THRESH_BINARY)[1]
                 # Do the tracking
                 # Each row of stats are structured as [x, y, w, h, area] 
-                n_labels, _, stats, centroids = cv2.connectedComponentsWithStats(processed_frame)
+                n_labels, _, stats, centroids = cv2.connectedComponentsWithStats(body_frame)
 
                 if n_labels > 1:
                     # assume that the second biggest contiguous thing is the fish (1st being the background)
                     fish_id = np.argsort(-stats[:, -1])[1]
                     fish_x, fish_y = centroids[fish_id] / self.param['image_scale']
-                    previous_ii = (self.ii - 1) % self.param['trace_length']
-                    this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
-                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
-                    bg_update_flag = this_frame_d_fish > 5
-
                     xpx, ypx, wpx, hpx, _ = (stats[fish_id] / self.param['image_scale']).astype(int)
                     fish_only_image = cv2.subtract(bg_image, frame)[ypx:(ypx+hpx), xpx:(xpx+wpx)]
+                    processed_frame[ypx:(ypx+hpx),:][:, xpx:(xpx+wpx)] += 55
 
                     # mu11 are covariance of (x, y) positive pixel positions and
                     # mu20, mu02 are respectively variances in x, y dimensions
@@ -139,23 +135,31 @@ class TrackerObject():
                     # Now using tan(2*theta) = 2*tan(theta)/(1-tan(theta)**2) and inserting [E1][E2]
                     # We arrive at tan(2*theta) = 2mu11/(mu20-mu02)
                     # Hence the definition of the angle below
-                    moments = cv2.moments(cv2.threshold(fish_only_image, 10, 255, cv2.THRESH_BINARY)[1])
-                    angle0 = 0.5 * np.arctan2(2 * moments['m11'], moments['m20'] - moments['m02'])
-                    
+                    moments = cv2.moments(cv2.threshold(fish_only_image, self.param['body_threshold'], 255, cv2.THRESH_BINARY)[1])
+                    angle = 0.5 * np.arctan2(2 * moments['mu11'], moments['mu20'] - moments['mu02'])
 
-                    # Or, maybe I can use a little bit more strict threshold, and detect head and 
-                    # angle to the head within the small cut-out image?
-                    head_blob = cv2.threshold(fish_only_image, np.percentile(fish_only_image, 90), 255, cv2.THRESH_BINARY)[1]
-                    head_blob = cv2.dilate(head_blob, cv2.getStructuringElement(cv2.MORPH_RECT, (4,)*2), iterations = 1)
-                    moments = cv2.moments(head_blob)
-                    angle = np.arctan2(moments['m10']/moments['m00']/wpx -0.5, moments['m01']/moments['m00']/hpx-0.5)
-                    processed_frame = fish_only_image
+                    # Now I find the position relative to fish only image center 
+                    moments = cv2.moments(cv2.threshold(fish_only_image, self.param['head_threshold'], 255, cv2.THRESH_BINARY)[1])
+                    if moments['m00'] > 0:
+                        x_com = moments['m10'] / moments['m00'] - wpx/2
+                        y_com = moments['m01'] / moments['m00'] - hpx/2
+                        fish_x += x_com
+                        fish_y += y_com
+                        if x_com < 0:
+                            angle = angle+np.pi
+                    else:
+                        print('head not found')
+
+                    previous_ii = (self.ii - 1) % self.param['trace_length']
+                    this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
+                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
+                    bg_update_flag = this_frame_d_fish > 5
+
 
                 else:
                     fish_x = 0
                     fish_y = 0
                     angle = 0
-                    angle0=0
 
                 
 
@@ -170,8 +174,8 @@ class TrackerObject():
                 # note that this function mutate the content of the input array
                 encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
                 self.shared_arrays['tracking_history'][0, self.ii] = fish_x
-                self.shared_arrays['tracking_history'][1, self.ii] = angle0 / np.pi * 180
-                self.shared_arrays['tracking_history'][2, self.ii] = angle / np.pi * 180
+                self.shared_arrays['tracking_history'][1, self.ii] = fish_y
+                self.shared_arrays['tracking_history'][2, self.ii] = (angle + np.pi) % (np.pi * 2.0) - np.pi
                 self.shared_arrays['tracking_history'][3, self.ii] = timestamp
                 self.ii = (self.ii + 1) % self.param['trace_length']
 

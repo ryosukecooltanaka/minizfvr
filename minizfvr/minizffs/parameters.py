@@ -22,9 +22,10 @@ class FreeSwimmingParams(BaseParams):
     # image preprocessing parameters
     show_raw: bool = True
     image_scale: float = 1.0
-    filter_size: int = 3
+    dilate_size: int = 3
     color_invert: bool = True
-    clip_threshold: int = 0
+    body_threshold: int = 0
+    head_threshold: int = 0
 
     # tracking algo parameters
     roi_x: float = 10.0  # in the post-rescaling coordinate

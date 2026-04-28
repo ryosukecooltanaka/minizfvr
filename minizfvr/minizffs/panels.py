@@ -36,19 +36,17 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         # The thing on which we put the image from the camera
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
         # ROI within which we look for fish
-        self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h))
+        self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h), pen=dict(color=(5, 40, 200), width=3))
         # Thing to plot the tracked fish
-        self.fish_tracked = pg.PlotCurveItem()
-
-        # old stuff to be removed
-        self.fish_area.setPen(dict(color=(5, 40, 200), width=3))
-        self.fish_tracked.setPen(dict(color=(245, 30, 200), width=3))
+        self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(200, 40, 200), size=8)
+        self.tracked_body = pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3))
 
         # connect everything
         self.addItem(self.display_area)
         self.display_area.addItem(self.fish_image_item)
         self.display_area.addItem(self.fish_area)
-        self.display_area.addItem(self.fish_tracked)
+        self.display_area.addItem(self.tracked_head)
+        self.display_area.addItem(self.tracked_body)
 
         # Some other flags
         self.level_adjust_flag = True # we do one-shot level adjust at start-up & parameter change
@@ -79,12 +77,15 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         pos, size = self.get_area_spec(f)
         self.fish_area.setPos(pos, finish=False) # finish=False suppressses the sigRegionChangeFinished, so we don't go into loop
         self.fish_area.setSize(size, finish=False)
-
         self.level_adjust_flag = True
 
-    def update_tracked_tail(self):
+    def update_tracked_tail(self, x, y, theta):
         # This is just for the sake of visualization. Do it later
-        pass
+        self.tracked_head.setData((x,), (y,))
+        body_x = np.asarray([0, -np.cos(theta)])*30 + x
+        body_y = np.asarray([0, -np.sin(theta)])*30 + y
+        self.tracked_body.setData(body_x, body_y)
+
 
 class TracePanel(pg.GraphicsLayoutWidget):
     """
@@ -125,25 +126,17 @@ class ControlPanel(QWidget):
         self.show_raw_checkbox = QCheckBox('show raw') # if checked, show un-processed image
         self.color_invert_checkbox = QCheckBox('invert') # if checked, invert image color (when fish is darker than the background)
         self.image_scale_box = TypeForcedEdit(float) # subclassed to only allow specific numeric types
-        self.filter_size_slider = QSlider(Qt.Horizontal)
-        self.clip_threshold_slider = QSlider(Qt.Horizontal)
+
+        self.dilate_size_box = TypeForcedEdit(int)
+        self.body_threshold_box = TypeForcedEdit(int)
+        self.head_threshold_box = TypeForcedEdit(int)
+
         self.arrange_widget()
 
     def arrange_widget(self):
         """
         Separating out arranging for visibility
         """
-        # some necessary initialization of individual widgets
-        self.filter_size_slider.setMinimum(1)
-        self.filter_size_slider.setMaximum(10)
-        self.filter_size_slider.setSingleStep(1)
-        self.filter_size_slider.setTickInterval(1)
-        self.filter_size_slider.setTickPosition(QSlider.TicksBelow)
-
-        self.clip_threshold_slider.setMinimum(0)
-        self.clip_threshold_slider.setMaximum(255)
-        self.clip_threshold_slider.setTickInterval(32)
-        self.clip_threshold_slider.setTickPosition(QSlider.TicksBelow)
 
         # arrange preprocessing control widget into a grid layout
         grid = QGridLayout()
@@ -154,10 +147,13 @@ class ControlPanel(QWidget):
         grid.addWidget(self.color_invert_checkbox, 1, 1, 1, 1)
         grid.addWidget(QLabel("Image Scale"),      0, 2, 1, 1, Qt.AlignCenter)
         grid.addWidget(self.image_scale_box,       1, 2, 1, 1)
-        grid.addWidget(QLabel("Filter Size"),      0, 3, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.filter_size_slider,    1, 3, 1, 1)
-        grid.addWidget(QLabel("Clip Threshold"),   0, 4, 1, 1, Qt.AlignCenter)
-        grid.addWidget(self.clip_threshold_slider, 1, 4, 1, 1)
+        grid.addWidget(QLabel("Dilation Scale"),      0, 3, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.dilate_size_box,    1, 3, 1, 1)
+        grid.addWidget(QLabel("Body Threshold"),   0, 4, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.body_threshold_box, 1, 4, 1, 1)
+        grid.addWidget(QLabel("Head Threshold"),   0, 5, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.head_threshold_box, 1, 5, 1, 1)
+        
 
         # Cosmetic size adjustment
         self.connect_button.setStyleSheet('font: bold 14px;')
@@ -175,12 +171,14 @@ class ControlPanel(QWidget):
         self.show_raw_checkbox.setChecked(p.show_raw)
         self.color_invert_checkbox.setChecked(p.color_invert)
         self.image_scale_box.setValue(p.image_scale)
-        self.filter_size_slider.setValue(p.filter_size)
-        self.clip_threshold_slider.setValue(p.clip_threshold)
+        self.dilate_size_box.setValue(p.dilate_size)
+        self.body_threshold_box.setValue(p.body_threshold)
+        self.head_threshold_box.setValue(p.head_threshold)
 
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\
                self.color_invert_checkbox.isChecked(),\
                self.image_scale_box.value(),\
-               self.filter_size_slider.value(),\
-               self.clip_threshold_slider.value()
+               self.dilate_size_box.value(),\
+               self.body_threshold_box.value(), \
+               self.head_threshold_box.value()

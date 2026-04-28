@@ -181,12 +181,17 @@ class MiniZFFS(QMainWindow):
 
     def connect_control_callbacks(self):
         ## If anything is changed in the camera panel or the control panel, refresh parameters
-        self.camera_panel.fish_area.sigRegionChangeFinished.connect(self.refresh_param)
-        self.control_panel.show_raw_checkbox.stateChanged.connect(self.refresh_param)
-        self.control_panel.color_invert_checkbox.stateChanged.connect(self.refresh_param)
-        self.control_panel.image_scale_box.editingFinished.connect(self.refresh_param)
-        self.control_panel.filter_size_slider.sliderReleased.connect(self.refresh_param)
-        self.control_panel.clip_threshold_slider.sliderReleased.connect(self.refresh_param)
+        events_to_trigger_param_refresh = (
+            self.camera_panel.fish_area.sigRegionChangeFinished,
+            self.control_panel.show_raw_checkbox.stateChanged,
+            self.control_panel.color_invert_checkbox.stateChanged,
+            self.control_panel.image_scale_box.editingFinished,
+            self.control_panel.dilate_size_box.editingFinished,
+            self.control_panel.body_threshold_box.editingFinished,
+            self.control_panel.head_threshold_box.editingFinished
+        )
+        for ettpr in events_to_trigger_param_refresh:
+            ettpr.connect(self.refresh_param)
 
         ## If the parameter is changed, updated the control panel GUI
         # the paramChanged signal has a float argument for the tail rescaling factor (signified as f here)
@@ -227,21 +232,21 @@ class MiniZFFS(QMainWindow):
         else:
             factor = 1.0
 
-        ## Camera panel tracked tail line update
-        # We need slicing because we are preparing a bit longer shared array for segment position, just in case if
-        # we wanted to update #segments dynamically)
-        self.camera_panel.update_tracked_tail()
-
-        ## Angle history plot update
         if any(self.tracking_history[1, :] > 0):
+            # find the index of the latest data
+            head_index = np.argmax(self.tracking_history[-1, :])
+
+            ## Camera panel
+            self.camera_panel.update_tracked_tail(*self.tracking_history[(0, 1, 2), head_index])
+
+            ## Trace panel
             # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
             # line connecting the head and tail
-            head_index = np.argmax(self.tracking_history[-1, :])
             latest_t = self.tracking_history[-1, head_index]
             rolled_data = np.roll(self.tracking_history[:, self.tracking_history[-1,:]>0], -head_index-1, axis=1)
             self.trace_panel.set_data(0, rolled_data[-1, :]-latest_t, rolled_data[0, :])
             self.trace_panel.set_data(1, rolled_data[-1, :]-latest_t, rolled_data[1, :])
-            self.trace_panel.set_data(2, rolled_data[-1, :]-latest_t, rolled_data[2, :])
+            self.trace_panel.set_data(2, rolled_data[-1, :]-latest_t, rolled_data[2, :] / np.pi * 180) # visualize as degree
 
             # Indicate frame rate (average for 100 frames, because if we do this every frame it is to jitterly to read)
             if rolled_data.shape[1] > 101:
@@ -262,7 +267,7 @@ class MiniZFFS(QMainWindow):
         """
 
         # Read the current content of the GUI widgets
-        new_sr, new_inv, new_iscale, new_fsize, new_cthresh = self.control_panel.return_current_value()
+        new_sr, new_inv, new_iscale, new_dsize, new_bthresh, new_hthresh = self.control_panel.return_current_value()
 
         # Before overwriting the old parameters, check if we need to adjust the tail ROI
         # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
@@ -299,15 +304,15 @@ class MiniZFFS(QMainWindow):
         self.param.show_raw = new_sr
         self.param.color_invert = new_inv
         self.param.image_scale = new_iscale
-        self.param.filter_size = int(new_fsize) # I think sliders return float?
-        self.param.clip_threshold = int(new_cthresh)
+        self.param.dilate_size = new_dsize
+        self.param.body_threshold = new_bthresh
+        self.param.head_threshold = new_hthresh
 
         # Emit parameter change signal (will trigger GUI update)
         self.param.paramChanged.emit(tail_rescale_factor)
 
         # Send parameter to the child process running the minizftt through the queue
         self.param_queue.put(self.param.__dict__)
-
 
     """
     Methods called once at the end

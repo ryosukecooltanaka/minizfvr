@@ -114,7 +114,7 @@ def preprocess_image(img, image_scale=1, filter_size=3, color_invert=False, clip
 
     return img
 
-def preprocess_free_swimming_image(img, bg, image_scale=1, filter_size=3, color_invert=False, clip_threshold=0, **kwargs):
+def detect_fish_body(img, bg, image_scale=1, dilate_size=3, color_invert=False, body_threshold=0, **kwargs):
     """
     Preprocessing for free swimming tracking
     Subtraction of background, inversion, fattening
@@ -128,10 +128,10 @@ def preprocess_free_swimming_image(img, bg, image_scale=1, filter_size=3, color_
     if image_scale != 1:
         img = cv2.resize(img, None, fx=image_scale, fy=image_scale, interpolation=cv2.INTER_AREA)
     # thresholding
-    img = cv2.threshold(img, clip_threshold, 255, cv2.THRESH_BINARY)[1]
+    img = cv2.threshold(img, body_threshold, 100, cv2.THRESH_BINARY)[1]
     # erosion followed by dilation
     img = cv2.erode(img, cv2.getStructuringElement(cv2.MORPH_RECT, (1,)*2), iterations = 1)
-    img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (filter_size,)*2), iterations = 1)
+    img = cv2.dilate(img, cv2.getStructuringElement(cv2.MORPH_RECT, (dilate_size,)*2), iterations = 1)
     return img
 
 
