@@ -236,15 +236,16 @@ class MiniZFFS(QMainWindow):
         if any(self.tracking_history[1, :] > 0):
             # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
             # line connecting the head and tail
-            head_index = np.argmax(self.tracking_history[1, :])
-            latest_t = self.tracking_history[1, head_index]
-            rolled_data = np.roll(self.tracking_history[:, self.tracking_history[1,:]>0], -head_index-1, axis=1)
-            self.trace_panel.set_data(0, rolled_data[1, :]-latest_t, rolled_data[0, :])
-            self.trace_panel.set_data(1, rolled_data[1, :]-latest_t, np.random.rand(len(rolled_data[1,:])))
+            head_index = np.argmax(self.tracking_history[-1, :])
+            latest_t = self.tracking_history[-1, head_index]
+            rolled_data = np.roll(self.tracking_history[:, self.tracking_history[-1,:]>0], -head_index-1, axis=1)
+            self.trace_panel.set_data(0, rolled_data[-1, :]-latest_t, rolled_data[0, :])
+            self.trace_panel.set_data(1, rolled_data[-1, :]-latest_t, rolled_data[1, :])
+            self.trace_panel.set_data(2, rolled_data[-1, :]-latest_t, rolled_data[2, :])
 
             # Indicate frame rate (average for 100 frames, because if we do this every frame it is to jitterly to read)
             if rolled_data.shape[1] > 101:
-                frame_rate = 100/(latest_t - rolled_data[1, -101])
+                frame_rate = 100/(latest_t - rolled_data[-1, -101])
                 self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
 
         ## Control panel -- connect button update

@@ -83,6 +83,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.level_adjust_flag = True
 
     def update_tracked_tail(self):
+        # This is just for the sake of visualization. Do it later
         pass
 
 class TracePanel(pg.GraphicsLayoutWidget):
@@ -99,7 +100,7 @@ class TracePanel(pg.GraphicsLayoutWidget):
 
         self.plot_datas[0].setPen(dict(color=(225, 30, 200), width=1))
         self.plot_datas[1].setPen(dict(color=(225, 200, 30), width=1))
-        self.plot_datas[2].setPen(dict(color=(200, 30, 225), width=1))
+        self.plot_datas[2].setPen(dict(color=(20, 30, 225), width=1))
 
         # connect everything
         for pdata in self.plot_datas:

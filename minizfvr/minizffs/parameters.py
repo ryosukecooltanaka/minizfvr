@@ -44,7 +44,7 @@ class FSParamObject(QObject, FreeSwimmingParams):
     This helps us keep the GUI and parameter behind it in sync without messing things up.
 
     Whenever we edit things from the GUI panel, callback functions will update the parameter.
-    Then we will make the StimParamObject emit the paramChanged signal.
+    Then we will make the FSParamObject emit the paramChanged signal.
     This signal is then connected to a method that updates the GUI panel.
 
     This is better than calling the GUI update method directly from the GUI callback in terms of modularity
@@ -52,12 +52,12 @@ class FSParamObject(QObject, FreeSwimmingParams):
     """
     # When the parameter object is changed in the GUI callback function, we emit this paramChagned signal.
     # This signal will be connected to the GUI refresh function of the control panel, to which the parameter object
-    # itself will be handed as an argument. In addition, we also might need to update the scale of the tail standard
+    # itself will be handed as an argument. In addition, we also might need to update the scale of the ROI
     # if the scale of the frame presented changed (i.e., by changing rescaling factor or toggling between showing
     # raw and processed frames). This rescaling factor pertains to the history of the parameter and as such cannot
-    # be computed solely based on the current parameter. As such, we need to compute this rescale factor in the
-    # paramChanged callback, and hand it to the camera_panel gui refresh method through the signal argument (hence
-    # the fload argument of this signal).
+    # be computed solely based on the current parameter. As such, whenever we emit the paramChanged signal, we will
+    # also compute the rescaling factor by comparing new & old parameters, and convey that factor to the Camera
+    # panel through the float argument of the signal.
     paramChanged = pyqtSignal(float)
 
 

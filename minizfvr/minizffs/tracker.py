@@ -1,9 +1,11 @@
 import numpy as np
 import multiprocessing as mp
+import cv2
 from multiprocessing import shared_memory
 from multiprocessing.connection import Listener
 from queue import Empty
-from ..utils import preprocess_image, center_of_mass_based_tracking, encode_frame_to_array, decode_array_to_frame
+from ..utils import preprocess_free_swimming_image, encode_frame_to_array, decode_array_to_frame
+
 
 
 class TrackerObject():
@@ -65,6 +67,10 @@ class TrackerObject():
         # Initially there is no connection -- this will be used to update the connect button in the GUI
         self.connection_lost_event.set()
 
+        # placeholder for the background image
+        bg_image = None
+        bg_update_flag = False
+
         # Do the tracking continuously
         # We will exit this loop if we receive the flag from the main GUI
         while not self.exit_acquisition_event.is_set():
@@ -94,24 +100,79 @@ class TrackerObject():
             try:
                 timestamp = timestamp_queue.get_nowait()
 
-                # get the content of the frame queue (from the camera process)
-                frame = decode_array_to_frame(self.shared_arrays['current_raw_frame']) # pyright: ignore[reportOptionalSubscript]
+                # Get the content of the frame queue (from the camera process)
+                frame = decode_array_to_frame(self.shared_arrays['current_raw_frame']) 
+
+                # If this is the very first frame, store that as a background
+                if bg_image is None:
+                    bg_image = np.zeros(frame.shape, dtype=np.uint8)
+                    bg_image = bg_image + frame
 
                 # do the preprocessing
-                processed_frame = preprocess_image(frame, **self.param)
+                processed_frame = preprocess_free_swimming_image(frame, bg_image, **self.param)
 
-                # do the tracking
+                # Do the tracking
+                # Each row of stats are structured as [x, y, w, h, area] 
+                n_labels, _, stats, centroids = cv2.connectedComponentsWithStats(processed_frame)
 
+                if n_labels > 1:
+                    # assume that the second biggest contiguous thing is the fish (1st being the background)
+                    fish_id = np.argsort(-stats[:, -1])[1]
+                    fish_x, fish_y = centroids[fish_id] / self.param['image_scale']
+                    previous_ii = (self.ii - 1) % self.param['trace_length']
+                    this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
+                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
+                    bg_update_flag = this_frame_d_fish > 5
 
+                    xpx, ypx, wpx, hpx, _ = (stats[fish_id] / self.param['image_scale']).astype(int)
+                    fish_only_image = cv2.subtract(bg_image, frame)[ypx:(ypx+hpx), xpx:(xpx+wpx)]
+
+                    # mu11 are covariance of (x, y) positive pixel positions and
+                    # mu20, mu02 are respectively variances in x, y dimensions
+                    # Think of the covariance matrix M = [[mu20, mu11], [mu11, mu02]]
+                    # The angle of the first eigen vector of M is going to be the long axis of the object
+                    # Let  the eigenvector v = (cos(theta), sin(theta))) and eigenvalues lambda
+                    # Now by expanding the character equation Mv=lambda*v, we get
+                    # tan(theta) = (lambda-mu20)/mu11 [E1] (note if mu11=0, M is diagonal and theta is 0 or pi/2)
+                    # At the same time, we can erase theta dependent terms and solve a quadratic equation
+                    # for lambda to get lambda = [(mu20+mu02)+sqrt((mu20-mu02)**2+4*mu11**2)] / 2 [E2]
+                    # Now using tan(2*theta) = 2*tan(theta)/(1-tan(theta)**2) and inserting [E1][E2]
+                    # We arrive at tan(2*theta) = 2mu11/(mu20-mu02)
+                    # Hence the definition of the angle below
+                    moments = cv2.moments(cv2.threshold(fish_only_image, 10, 255, cv2.THRESH_BINARY)[1])
+                    angle0 = 0.5 * np.arctan2(2 * moments['m11'], moments['m20'] - moments['m02'])
+                    
+
+                    # Or, maybe I can use a little bit more strict threshold, and detect head and 
+                    # angle to the head within the small cut-out image?
+                    head_blob = cv2.threshold(fish_only_image, np.percentile(fish_only_image, 90), 255, cv2.THRESH_BINARY)[1]
+                    head_blob = cv2.dilate(head_blob, cv2.getStructuringElement(cv2.MORPH_RECT, (4,)*2), iterations = 1)
+                    moments = cv2.moments(head_blob)
+                    angle = np.arctan2(moments['m10']/moments['m00']/wpx -0.5, moments['m01']/moments['m00']/hpx-0.5)
+                    processed_frame = fish_only_image
+
+                else:
+                    fish_x = 0
+                    fish_y = 0
+                    angle = 0
+                    angle0=0
+
+                
+
+                if bg_update_flag:
+                    print('update background', this_frame_d_fish)
+                    bg_image = ((bg_image*0.99) + frame*0.01).astype(np.uint8)
 
                 # send tracking results to stimulus program through the named pipe
-                self.send_angle_through_pipe(timestamp, 0)
+                self.send_results_through_pipe(timestamp, 0)
 
                 # write results into the shared memory array so the main process can see it
                 # note that this function mutate the content of the input array
                 encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
-                self.shared_arrays['tracking_history'][0, self.ii] = 0
-                self.shared_arrays['tracking_history'][1, self.ii] = timestamp
+                self.shared_arrays['tracking_history'][0, self.ii] = fish_x
+                self.shared_arrays['tracking_history'][1, self.ii] = angle0 / np.pi * 180
+                self.shared_arrays['tracking_history'][2, self.ii] = angle / np.pi * 180
+                self.shared_arrays['tracking_history'][3, self.ii] = timestamp
                 self.ii = (self.ii + 1) % self.param['trace_length']
 
             except Empty:
@@ -142,10 +203,10 @@ class TrackerObject():
         self.shared_arrays = dict(
             current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
             current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
-            tracking_history   = np.ndarray((2, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf)
+            tracking_history   = np.ndarray((4, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf)
         )
 
-    def send_angle_through_pipe(self, timestamp, d_angle):
+    def send_results_through_pipe(self, timestamp, d_angle):
         """
         Send tracking results to whatever stimulus presentation program through the named Pipe
         """
