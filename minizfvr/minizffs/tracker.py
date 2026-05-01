@@ -37,9 +37,6 @@ class TrackerObject():
         self.shared_memories = None
         self.shared_arrays = None
 
-        # A counter for angle history buffer update
-        self.ii = 0
-
         # We will store connection object as an attribute (for the convenience)
         self.conn = None
 
@@ -71,6 +68,9 @@ class TrackerObject():
         bg_image = None
         bg_update_flag = False
 
+        # index of the tracked frames
+        ii: np.uint32 = 0
+
         # Do the tracking continuously
         # We will exit this loop if we receive the flag from the main GUI
         while not self.exit_acquisition_event.is_set():
@@ -85,7 +85,6 @@ class TrackerObject():
                     print('[Tracker] listner.accept() failed', flush=True)
                     self.connection_lost_event.set()
             self.attempt_connection_event.clear()
-
 
             # Check parameter queue for new parameters
             # We use try/catch as opposed to queue.empty(), because apparently the latter is not reliable
@@ -115,17 +114,17 @@ class TrackerObject():
                                             color_invert=self.param['color_invert'],
                                             body_threshold=self.param['body_threshold'])
                 
-
-                previous_ii = (self.ii - 1) % self.param['trace_length']
-                this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
-                                            (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
-                bg_update_flag = this_frame_d_fish > self.param['bg_update_px_thresh']
+                if ii > 1:
+                    previous_ii = (ii - 1) % self.param['trace_length']
+                    this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
+                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
+                    bg_update_flag = this_frame_d_fish > self.param['bg_update_px_thresh']
 
                 if bg_update_flag:
                     bg_image = ((bg_image*(1-self.param['bg_alpha'])) + frame*self.param['bg_alpha']).astype(np.uint8)
 
                 # send tracking results to stimulus program through the named pipe
-                self.send_results_through_pipe(timestamp, 0)
+                self.send_results_through_pipe(timestamp, fish_x, fish_y, angle)
 
                 # write results into the shared memory array so the main process can see it
                 # note that this function mutate the content of the input array
@@ -133,11 +132,12 @@ class TrackerObject():
                     encode_frame_to_array(bg_image, self.shared_arrays['current_processed_frame'])
                 else:
                     encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
-                self.shared_arrays['tracking_history'][0, self.ii] = fish_x
-                self.shared_arrays['tracking_history'][1, self.ii] = fish_y
-                self.shared_arrays['tracking_history'][2, self.ii] = (angle + np.pi) % (np.pi * 2.0) - np.pi
-                self.shared_arrays['tracking_history'][3, self.ii] = timestamp
-                self.ii = (self.ii + 1) % self.param['trace_length']
+                self.shared_arrays['tracking_history'][0, ii% self.param['trace_length']] = fish_x
+                self.shared_arrays['tracking_history'][1, ii% self.param['trace_length']] = fish_y
+                self.shared_arrays['tracking_history'][2, ii% self.param['trace_length']] = (angle + np.pi) % (np.pi * 2.0) - np.pi
+                self.shared_arrays['tracking_history'][3, ii% self.param['trace_length']] = timestamp
+                self.shared_arrays['index_buffer'][ii% self.param['trace_length']] = ii
+                ii += 1
 
             except Empty:
                 pass
@@ -159,7 +159,8 @@ class TrackerObject():
         self.shared_memories = dict(
             raw_frame_memory       = shared_memory.SharedMemory(name='raw_frame_memory'),
             processed_frame_memory = shared_memory.SharedMemory(name='processed_frame_memory'),
-            tracking_memory   = shared_memory.SharedMemory(name='tracking_memory')
+            tracking_memory   = shared_memory.SharedMemory(name='tracking_memory'),
+            index_memory = shared_memory.SharedMemory(name='index_memory')
         )
 
         # The sizes of ndarrays are hard-coded without referencing the memory size, because memory size cannot be
@@ -167,17 +168,18 @@ class TrackerObject():
         self.shared_arrays = dict(
             current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
             current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
-            tracking_history   = np.ndarray((4, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf)
+            tracking_history   = np.ndarray((4, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf),
+            index_buffer = np.ndarray((self.param['trace_length'], ), dtype=np.uint32, buffer=self.shared_memories['index_memory'].buf)
         )
 
-    def send_results_through_pipe(self, timestamp, d_angle):
+    def send_results_through_pipe(self, t, x, y, theta):
         """
         Send tracking results to whatever stimulus presentation program through the named Pipe
         """
 
         if self.conn is not None:
             try:
-                self.conn.send((timestamp, d_angle))
+                self.conn.send((t, x, y, theta))
             except ConnectionError:
                 print('[Tracker] Connection to the stimulus program is lost!', flush=True)
                 self.conn = None

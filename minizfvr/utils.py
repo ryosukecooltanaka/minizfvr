@@ -162,7 +162,9 @@ def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold)
     fish_snippet = diff_img[ypx:(ypx+hpx), xpx:(xpx+wpx)]
 
     # update the viusalization image
-    visualization_image[ypx:(ypx+hpx), xpx:(xpx+wpx)] += 127
+    slice_y = slice(int(ypx*image_scale), int((ypx+hpx)*image_scale))
+    slice_x = slice(int(xpx*image_scale), int((xpx+wpx)*image_scale))
+    visualization_image[slice_y, slice_x] += 127
 
     # First, find the orientation of the fish body by doing PCA
     # mu11 are covariance of (x, y) positive pixel positions and
@@ -352,6 +354,26 @@ class roundButton(QLabel):
 
     def leaveEvent(self, *args, **kwargs):
         self.changeAlpha(30)
+
+class messageLabel(QLabel):
+    """
+    Subclass QLabel for the dynamic GUI message bar
+    It can hold multiple messages as a list and show them combined
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.message_list = []
+
+    def update_message(self, message, i=-1):
+        if i < len(self.message_list):
+            self.message_list[i] = message
+        else:
+            print('adding new message')
+            self.message_list.append(message)
+        self.setText(" / ".join(self.message_list))
+
+
 
 def sync_buffer_to_file(file, buffer, last_sample_index, buffer_size):
     """

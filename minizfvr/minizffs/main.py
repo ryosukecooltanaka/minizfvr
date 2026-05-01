@@ -36,11 +36,12 @@ from PyQt5.QtGui import QIcon
 
 import qdarkstyle
 
-from ..utils import decode_array_to_frame, set_icon
+from ..utils import decode_array_to_frame, set_icon, messageLabel
 from minizfvr.minizftt.camera import SelectCameraByName
-from .panels import CameraPanel, TracePanel, ControlPanel
+from .panels import CameraPanel, ControlPanel
 from .tracker import TrackerObject
 from .parameters import FSParamObject
+from .saver import Saver
 
 # TO DO: Make the parameter QObject and combine things through signals
 
@@ -69,9 +70,8 @@ class MiniZFFS(QMainWindow):
         # Create other widgets & arrange them onto the main window
         self.camera_panel = CameraPanel(**self.param.__dict__)
         self.camera_panel.switch_colormap(self.param.show_raw) # set colormap
-        self.trace_panel = TracePanel()
         self.control_panel = ControlPanel()
-        self.message_strip = QLabel()
+        self.message_strip = messageLabel()
         self.arrange_widgets()
 
         ## Select camera / create a camera object
@@ -99,6 +99,9 @@ class MiniZFFS(QMainWindow):
         # Memory for the history of the x, y position / angle and associated time stamps.
         # length is decided by trace_length parameter (x 8byte float x 4)
         self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=32*self.param.trace_length)
+        # For the sake of saving, we need to keep track how manieth sample we have written
+        # We use uint32, which would not cause overflow for 4 month with 200 Hz tracking
+        self.index_memory = shared_memory.SharedMemory(create=True, name='index_memory', size=4*self.param.trace_length)
 
         ## Create numpy arrays that refers to the shared memory we allocated
         # For the raw and processed image frames, we store data as 1d array, because the shape of the frame can
@@ -107,6 +110,8 @@ class MiniZFFS(QMainWindow):
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.tracking_history = np.ndarray((4, self.param.trace_length), dtype=np.float64, buffer=self.tracking_memory.buf)
         self.tracking_history[:] = 0 # initialize
+        self.index_buffer = np.ndarray((self.param.trace_length, ), dtype=np.int32, buffer=self.index_memory.buf)
+        self.index_buffer[:] = -1
 
         ## Create Queues
         # We still use queues for timestamps and parameters. Everytime the tracking process receives a new timestamp
@@ -132,6 +137,9 @@ class MiniZFFS(QMainWindow):
         # does not shut down like zombies
         self.acquisition_process.daemon = True
         self.tracking_process.daemon = True
+
+        ## Prepare a saver object to handle saving
+        self.saver = Saver(self.tracking_history, self.index_buffer, self.param)
 
         # Setup callback functions for the control panel GUI.
         self.connect_control_callbacks()
@@ -168,15 +176,13 @@ class MiniZFFS(QMainWindow):
         # Control box will require layouts of its own, but let's worry about that later
         layout = QVBoxLayout()
         layout.addWidget(self.camera_panel)
-        layout.addWidget(self.trace_panel)
         layout.addWidget(self.control_panel)
         layout.addWidget(self.message_strip)
 
         # Adjust height ratios
         layout.setStretch(0, 30)
         layout.setStretch(1, 9)
-        layout.setStretch(2, 3)
-        layout.setStretch(3, 1)
+        layout.setStretch(2, 1)
 
         container.setLayout(layout)
 
@@ -189,7 +195,8 @@ class MiniZFFS(QMainWindow):
             self.control_panel.color_invert_checkbox.stateChanged,
             self.control_panel.image_scale_box.editingFinished,
             self.control_panel.dilate_size_box.editingFinished,
-            self.control_panel.body_threshold_box.editingFinished
+            self.control_panel.body_threshold_box.editingFinished,
+            self.control_panel.save_duration_box.editingFinished
         )
         for ettpr in events_to_trigger_param_refresh:
             ettpr.connect(self.refresh_param)
@@ -201,6 +208,10 @@ class MiniZFFS(QMainWindow):
         # the paramChanged signal has a float argument for the tail rescaling factor (signified as f here)
         self.param.paramChanged.connect(lambda f, p=self.param : self.control_panel.refresh_gui(p))
         self.param.paramChanged.connect(lambda f  : self.camera_panel.refresh_gui(f))
+
+        # save panel callback
+        self.control_panel.save_button.clicked.connect(self.control_panel.save_button.switch_state)
+        self.control_panel.save_button.clicked.connect(lambda: self.saver.toggle_save_state(self.control_panel.save_button.activated))
 
         # Connect button callback
         self.control_panel.connect_button.clicked.connect(self.tracker.attempt_connection_event.set)
@@ -240,22 +251,18 @@ class MiniZFFS(QMainWindow):
             # find the index of the latest data
             head_index = np.argmax(self.tracking_history[-1, :])
 
-            ## Camera panel
-            self.camera_panel.update_tracked_tail(*self.tracking_history[(0, 1, 2), head_index], factor)
-
-            ## Trace panel
             # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
             # line connecting the head and tail
             latest_t = self.tracking_history[-1, head_index]
             rolled_data = np.roll(self.tracking_history[:, self.tracking_history[-1,:]>0], -head_index-1, axis=1)
-            self.trace_panel.set_data(0, rolled_data[-1, :]-latest_t, rolled_data[0, :])
-            self.trace_panel.set_data(1, rolled_data[-1, :]-latest_t, rolled_data[1, :])
-            self.trace_panel.set_data(2, rolled_data[-1, :]-latest_t, rolled_data[2, :] / np.pi * 180) # visualize as degree
 
-            # Indicate frame rate (average for 100 frames, because if we do this every frame it is to jitterly to read)
+            # Indicate frame rate (average for 100 frames, because if we do this every frame it is too jitterly to read)
             if rolled_data.shape[1] > 101:
                 frame_rate = 100/(latest_t - rolled_data[-1, -101])
-                self.message_strip.setText('Median frame rate = {:0.2f} Hz'.format(frame_rate))
+                self.message_strip.update_message('Median frame rate = {:0.2f} Hz'.format(frame_rate), 0)
+
+            # plot
+            self.camera_panel.update_tracked_fish(rolled_data, factor)
 
         ## Control panel -- connect button update
         if self.tracker.connection_lost_event.is_set():
@@ -271,7 +278,7 @@ class MiniZFFS(QMainWindow):
         """
 
         # Read the current content of the GUI widgets
-        new_sr, new_sb, new_inv, new_iscale, new_dsize, new_bthresh = self.control_panel.return_current_value()
+        new_sr, new_sb, new_inv, new_iscale, new_dsize, new_bthresh, new_sd = self.control_panel.return_current_value()
 
         # Before overwriting the old parameters, check if we need to adjust the tail ROI
         # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
@@ -300,6 +307,10 @@ class MiniZFFS(QMainWindow):
         self.param.roi_x, self.param.roi_y = pos
         self.param.roi_w, self.param.roi_h = size
 
+        # show roi size (always in the raw coordinate)
+        self.message_strip.update_message(
+            'ROI size (raw) = {0:.0f}/{1:.0f} px'.format(size[0]/self.param.image_scale,size[1]/self.param.image_scale), 1)
+
         # Also, we want to adapt the search area size to the tail standard length,
         # because when the search area is too big (say, bigger than each segment)
         # the intensity center-of-mass can "go back" on the actual tail
@@ -311,7 +322,8 @@ class MiniZFFS(QMainWindow):
         self.param.image_scale = new_iscale
         self.param.dilate_size = new_dsize
         self.param.body_threshold = new_bthresh
-        
+        self.param.save_duration = new_sd
+
         # Emit parameter change signal (will trigger GUI update)
         self.param.paramChanged.emit(tail_rescale_factor)
 

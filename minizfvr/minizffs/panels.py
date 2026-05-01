@@ -37,9 +37,11 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
         # ROI within which we look for fish
         self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h), pen=dict(color=(5, 40, 200), width=3))
+
         # Thing to plot the tracked fish
         self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(40,200,40), size=8)
         self.tracked_body = pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3))
+        self.trajectory = pg.PlotCurveItem(pen=dict(color=(20, 100, 20), width=2, style=Qt.DotLine))
 
         # connect everything
         self.addItem(self.display_area)
@@ -47,6 +49,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.display_area.addItem(self.fish_area)
         self.display_area.addItem(self.tracked_head)
         self.display_area.addItem(self.tracked_body)
+        self.display_area.addItem(self.trajectory)
 
         # Some other flags
         self.level_adjust_flag = True # we do one-shot level adjust at start-up & parameter change
@@ -79,16 +82,18 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.fish_area.setSize(size, finish=False)
         self.level_adjust_flag = True
 
-    def update_tracked_tail(self, x, y, theta, scale):
-        # This is just for the sake of visualization. Do it later
-        if not np.isnan(x):
-            self.tracked_head.setData((x*scale,), (y*scale,))
-            body_x = np.asarray([0, -np.cos(theta)])*30 + x*scale
-            body_y = np.asarray([0, -np.sin(theta)])*30 + y*scale
+    def update_tracked_fish(self, data, scale):
+        # data is 4 x N array in the order of x, y, theta, timestamp, where
+        # the last column is always the latest
+        if not np.isnan(data[0,-1]):
+            self.tracked_head.setData((data[0,-1]*scale,), (data[1,-1]*scale,))
+            body_x = np.asarray([0, -np.cos(data[2,-1])])*30 + data[0,-1]*scale
+            body_y = np.asarray([0, -np.sin(data[2,-1])])*30 + data[1,-1]*scale
             self.tracked_body.setData(body_x, body_y)
         else:
             self.tracked_head.setData([])
             self.tracked_body.setData([])
+        self.trajectory.setData(data[0, :]*scale, data[1, :]*scale)
 
     def switch_colormap(self, k: bool):
         if k:
@@ -97,30 +102,6 @@ class CameraPanel(pg.GraphicsLayoutWidget):
             # in the order of BG, fish bounding box, body, head
             self.fish_image_item.setColorMap(pg.ColorMap((0,0.5,1), [(127,127,127),(255,255,0),(0,0,127)]))
 
-class TracePanel(pg.GraphicsLayoutWidget):
-    """
-    This is the panel (widget) for the trace plot
-    3 traces per fish (x, y , theta)
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__()
-        # Prepare tail angle plot item & data
-        self.plot = pg.PlotItem()
-        self.plot_datas = [pg.PlotDataItem() for i in range(3)]
-
-        self.plot_datas[0].setPen(dict(color=(225, 30, 200), width=1))
-        self.plot_datas[1].setPen(dict(color=(225, 200, 30), width=1))
-        self.plot_datas[2].setPen(dict(color=(20, 30, 225), width=1))
-
-        # connect everything
-        for pdata in self.plot_datas:
-            self.addItem(self.plot)
-            self.plot.addItem(pdata)
-
-    def set_data(self, i, t, val):
-        """ Data update method """
-        self.plot_datas[i].setData(t, val)
 
 class ControlPanel(QWidget):
     """
@@ -144,6 +125,8 @@ class ControlPanel(QWidget):
         self.dilate_size_box = TypeForcedEdit(int)
         self.body_threshold_box = TypeForcedEdit(int)
 
+        self.save_duration_box = TypeForcedEdit(float)
+
         self.arrange_widget()
 
     def arrange_widget(self):
@@ -153,10 +136,11 @@ class ControlPanel(QWidget):
 
         # arrange preprocessing control widget into a grid layout
         grid = QGridLayout()
+        self.save_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
         self.connect_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
-        self.connect_button.setMinimumWidth(100)
-        grid.addWidget(self.connect_button,        0, 0, 2, 1)
-        grid.addWidget(self.save_button,           2, 0, 1, 1)
+        self.save_button.setMinimumWidth(100)
+        grid.addWidget(self.save_button,           0, 0, 2, 1)
+        grid.addWidget(self.connect_button,        2, 0, 2, 1)
 
         grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
         grid.addWidget(self.show_bg_checkbox,      1, 1, 1, 1) # row, col, rowspan, colspan
@@ -170,6 +154,9 @@ class ControlPanel(QWidget):
 
         grid.addWidget(QLabel("Body Threshold"),   2, 2, 1, 1, Qt.AlignCenter)
         grid.addWidget(self.body_threshold_box,    2, 3, 1, 1)
+
+        grid.addWidget(QLabel("Save duration"),    3, 2, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.save_duration_box,    3, 3, 1, 1)
         
         # Cosmetic size adjustment
         self.connect_button.setStyleSheet('font: bold 14px;')
@@ -188,6 +175,7 @@ class ControlPanel(QWidget):
         self.image_scale_box.setValue(p.image_scale)
         self.dilate_size_box.setValue(p.dilate_size)
         self.body_threshold_box.setValue(p.body_threshold)
+        self.save_duration_box.setValue(p.save_duration)
 
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\
@@ -195,4 +183,5 @@ class ControlPanel(QWidget):
                self.color_invert_checkbox.isChecked(),\
                self.image_scale_box.value(),\
                self.dilate_size_box.value(),\
-               self.body_threshold_box.value()
+               self.body_threshold_box.value(), \
+               self.save_duration_box.value()

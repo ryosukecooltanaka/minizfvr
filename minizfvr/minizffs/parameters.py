@@ -14,10 +14,16 @@ class FreeSwimmingParams(BaseParams):
 
     # default config path (home directory)
     config_path: str = str(Path.home() / 'minizffs_config.json')
+    log_path: str = str(Path.home())
 
     # camera settings
     camera_type: str = None
     dummy_video_path: str = './tail_movie.mp4'
+
+    # Calibration parameter
+    # Minizffs itself will not have any explicit mechanism to do the calibration
+    # So this needs to be specified in the config file
+    mm_per_px: float = 0.1 
 
     # image preprocessing parameters
     show_raw: bool = True
@@ -39,6 +45,9 @@ class FreeSwimmingParams(BaseParams):
 
     # visualization related parameters
     trace_length: int = 1000
+
+    # save related
+    save_duration: float = 60.0 # in seconds
 
     # communication: make sure they are the same across tracker and stim
     localhost_port: int = 6000
