@@ -349,7 +349,7 @@ class MiniZFFS(QMainWindow):
         # close and unlink shared memories
         for attr in dir(self):
             if type(getattr(self, attr)) == shared_memory.SharedMemory:
-                print('[MiniZFTT] closing shared memory',attr)
+                print('[MiniZFFS] closing shared memory',attr)
                 getattr(self, attr).close()
                 getattr(self, attr).unlink()
 

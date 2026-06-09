@@ -22,8 +22,14 @@ class FreeSwimmingParams(BaseParams):
 
     # Calibration parameter
     # Minizffs itself will not have any explicit mechanism to do the calibration
-    # So this needs to be specified in the config file
+    # So this needs to be specified in the config file. The GUI will show the pixel
+    # size of the ROI, so what you should do is to adjust the ROI to an object with
+    # known dimensions, and calcualte this
     mm_per_px: float = 0.1 
+
+    # size threshold of fish detection to reject objects too big or small
+    max_area_mm2: float = 5.0
+    min_area_mm2: float = 1.0
 
     # image preprocessing parameters
     show_raw: bool = True
@@ -41,7 +47,8 @@ class FreeSwimmingParams(BaseParams):
 
     # background update
     bg_alpha: float = 0.1
-    bg_update_px_thresh: int = 5
+    bg_update_min_velocity: float = 5.0
+    bg_update_max_velocity: float = 30.0 # unlikely that fish is this fast
 
     # visualization related parameters
     trace_length: int = 1000

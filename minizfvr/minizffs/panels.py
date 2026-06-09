@@ -41,7 +41,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         # Thing to plot the tracked fish
         self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(40,200,40), size=8)
         self.tracked_body = pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3))
-        self.trajectory = pg.PlotCurveItem(pen=dict(color=(20, 100, 20), width=2, style=Qt.DotLine))
+        self.trajectory = pg.PlotCurveItem(pen=dict(color=(20, 100, 20, 50), width=1, ))
 
         # connect everything
         self.addItem(self.display_area)

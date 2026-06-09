@@ -39,12 +39,13 @@ class Saver(QObject):
         self.timer.timeout.connect(self.save_data)  # define callback
 
     def toggle_save_state(self, new_state):
-        print('new saving state = ', new_state)
         if new_state:
             # create file, prepare dataset
+            print('[Saver] Start saving...')
             self.initialize_saving()
         else:
             # close handle, shrink dataset
+            print('[Saver] Finished saving...')
             self.finalize_saving()
 
     def initialize_saving(self):
@@ -62,6 +63,7 @@ class Saver(QObject):
         ops_dict = dict(shape=(0,), maxshape=(None,), dtype=np.float64,  chunks=True)
         for dname in ('x', 'y', 'theta', 't'):
             self.save_file.create_dataset(dname, **ops_dict)
+        self.save_file.create_dataset('mm_per_px', data=(self.param.mm_per_px,))
         
         self.t0 = max(self.data_array[3, :])
         self.i0 = max(self.index_buffer)
@@ -83,13 +85,11 @@ class Saver(QObject):
         rolled_data = np.roll(self.data_array, -head_index-1, axis=1)
         to_be_saved = np.roll(self.index_buffer, -head_index-1) > self.i_last_saved
 
-        print(np.sum(to_be_saved), self.i_last_saved, latest_frame_index)
-
         for dname in ('x', 'y', 'theta', 't'):
             self.save_file[dname].resize((latest_frame_index-self.i0,))
         save_range = slice(self.i_last_saved-self.i0, latest_frame_index-self.i0)
-        self.save_file['x'][save_range] = rolled_data[0, to_be_saved]
-        self.save_file['y'][save_range] = rolled_data[1, to_be_saved]
+        self.save_file['x'][save_range] = rolled_data[0, to_be_saved] * self.param.mm_per_px
+        self.save_file['y'][save_range] = rolled_data[1, to_be_saved] * self.param.mm_per_px
         self.save_file['theta'][save_range] = rolled_data[2, to_be_saved]
         self.save_file['t'][save_range] = rolled_data[3, to_be_saved] - self.t0
         

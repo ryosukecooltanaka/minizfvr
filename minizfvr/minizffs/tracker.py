@@ -4,7 +4,8 @@ import cv2
 from multiprocessing import shared_memory
 from multiprocessing.connection import Listener
 from queue import Empty
-from ..utils import detect_fish, encode_frame_to_array, decode_array_to_frame
+from ..utils import encode_frame_to_array, decode_array_to_frame
+from .fsutils import detect_fish
 
 
 
@@ -67,6 +68,11 @@ class TrackerObject():
         # placeholder for the background image
         bg_image = None
         bg_update_flag = False
+        fish_mask = None
+
+        # For dt calculation
+        timestamp = 0
+        last_timestamp = -1
 
         # index of the tracked frames
         ii: np.uint32 = 0
@@ -98,6 +104,7 @@ class TrackerObject():
             # shared memory is new. So we do tracking
             try:
                 timestamp = timestamp_queue.get_nowait()
+                dt = timestamp - last_timestamp 
 
                 # Get the content of the frame queue (from the camera process)
                 frame = decode_array_to_frame(self.shared_arrays['current_raw_frame']) 
@@ -106,22 +113,34 @@ class TrackerObject():
                 if bg_image is None:
                     bg_image = np.zeros(frame.shape, dtype=np.uint8)
                     bg_image = bg_image + frame
+                    fish_mask = np.zeros(bg_image.shape)
 
                 # do the preprocessing
-                fish_x, fish_y, angle, processed_frame = detect_fish(frame, bg_image, 
+                fish_x, fish_y, angle, processed_frame, frect = detect_fish(frame, bg_image, 
                                             image_scale=self.param['image_scale'],
                                             dilate_size=self.param['dilate_size'],
                                             color_invert=self.param['color_invert'],
-                                            body_threshold=self.param['body_threshold'])
+                                            body_threshold=self.param['body_threshold'],
+                                            real_fish_px_range=(self.param['min_area_mm2']/self.param['mm_per_px']**2, 
+                                                                self.param['max_area_mm2']/self.param['mm_per_px']**2))
                 
                 if ii > 1:
+                    # We will only update background when fish moves
+                    # Otherwise we will stop seeing stationary fish
+                    # Also if fish appers to be moving super fast that is more likely
+                    # to be us detecting some gunk etc. so ignore that for the sake of movements
                     previous_ii = (ii - 1) % self.param['trace_length']
-                    this_frame_d_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
-                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2)
-                    bg_update_flag = this_frame_d_fish > self.param['bg_update_px_thresh']
+                    this_frame_v_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
+                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2) * self.param['mm_per_px'] / dt
+                    bg_update_flag = self.param['bg_update_min_velocity'] < this_frame_v_fish < self.param['bg_update_max_velocity'] 
 
                 if bg_update_flag:
-                    bg_image = ((bg_image*(1-self.param['bg_alpha'])) + frame*self.param['bg_alpha']).astype(np.uint8)
+                    # to avoid "baking in" fish into the background, only select non-fish area for
+                    # background update
+                    fish_mask *= 0.0
+                    fish_mask[frect[1]:(frect[1]+frect[3]), frect[0]:(frect[0]+frect[2])] = 1.0
+                    bg_image = ((fish_mask + (1-self.param['bg_alpha'])*(1.0-fish_mask)) * bg_image +
+                               self.param['bg_alpha'] * (1.0-fish_mask) * frame).astype(np.uint8)
 
                 # send tracking results to stimulus program through the named pipe
                 self.send_results_through_pipe(timestamp, fish_x, fish_y, angle)
@@ -137,7 +156,10 @@ class TrackerObject():
                 self.shared_arrays['tracking_history'][2, ii% self.param['trace_length']] = (angle + np.pi) % (np.pi * 2.0) - np.pi
                 self.shared_arrays['tracking_history'][3, ii% self.param['trace_length']] = timestamp
                 self.shared_arrays['index_buffer'][ii% self.param['trace_length']] = ii
+
+
                 ii += 1
+                last_timestamp = timestamp
 
             except Empty:
                 pass
