@@ -18,7 +18,10 @@ class FreeSwimmingParams(BaseParams):
 
     # camera settings
     camera_type: str = None
-    dummy_video_path: str = './tail_movie.mp4'
+    dummy_video_path: str = './arena.avi'
+
+    # multi-fish tracking!
+    n_fish_to_track: int = 1
 
     # Calibration parameter
     # Minizffs itself will not have any explicit mechanism to do the calibration

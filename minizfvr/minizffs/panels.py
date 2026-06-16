@@ -21,7 +21,7 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     It holds image from camera + tail standard + tracked tail
     """
 
-    def __init__(self, *args, roi_x=0, roi_y=0, roi_w=100, roi_h=100, **kwargs):
+    def __init__(self, *args, roi_x=0, roi_y=0, roi_w=100, roi_h=100, n_fish_to_track=1, **kwargs):
 
         # The reason I am passing the input arguments to the constructor is 
         # so you can load last-used ROI settings from the config file.
@@ -32,6 +32,8 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         # This is the "GraphicsItem" that is added to the widget
         self.display_area = pg.ViewBox(invertY=True, lockAspect=True)  # this graphics item implements easy scaling
 
+        self.n_fish = n_fish_to_track
+
         ## Objects to be added to the View Box
         # The thing on which we put the image from the camera
         self.fish_image_item = pg.ImageItem(axisOrder='row-major')
@@ -39,18 +41,16 @@ class CameraPanel(pg.GraphicsLayoutWidget):
         self.fish_area = pg.RectROI((roi_x, roi_y), (roi_w, roi_h), pen=dict(color=(5, 40, 200), width=3))
 
         # Thing to plot the tracked fish
-        self.tracked_head = pg.ScatterPlotItem(symbol='o', pen=None, brush=(40,200,40), size=8)
-        self.tracked_body = pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3))
-        self.trajectory = pg.PlotCurveItem(pen=dict(color=(20, 100, 20, 50), width=1, ))
-
+        self.tracked_heads = [pg.ScatterPlotItem(symbol='o', pen=None, brush=(40,200,40), size=8) for i in range(n_fish_to_track)]
+        self.tracked_bodies = [pg.PlotCurveItem(pen=dict(color=(40, 200, 200), width=3)) for i in range(n_fish_to_track)]
+        
         # connect everything
         self.addItem(self.display_area)
         self.display_area.addItem(self.fish_image_item)
         self.display_area.addItem(self.fish_area)
-        self.display_area.addItem(self.tracked_head)
-        self.display_area.addItem(self.tracked_body)
-        self.display_area.addItem(self.trajectory)
-
+        [self.display_area.addItem(h) for h in self.tracked_heads] 
+        [self.display_area.addItem(b) for b in self.tracked_bodies]
+        
         # Some other flags
         self.level_adjust_flag = True # we do one-shot level adjust at start-up & parameter change
 
@@ -85,15 +85,15 @@ class CameraPanel(pg.GraphicsLayoutWidget):
     def update_tracked_fish(self, data, scale):
         # data is 4 x N array in the order of x, y, theta, timestamp, where
         # the last column is always the latest
-        if not np.isnan(data[0,-1]):
-            self.tracked_head.setData((data[0,-1]*scale,), (data[1,-1]*scale,))
-            body_x = np.asarray([0, -np.cos(data[2,-1])])*30 + data[0,-1]*scale
-            body_y = np.asarray([0, -np.sin(data[2,-1])])*30 + data[1,-1]*scale
-            self.tracked_body.setData(body_x, body_y)
-        else:
-            self.tracked_head.setData([])
-            self.tracked_body.setData([])
-        self.trajectory.setData(data[0, :]*scale, data[1, :]*scale)
+        for i in range(self.n_fish):
+            if not np.isnan(data[0,-1-i]):
+                self.tracked_heads[i].setData((data[0,-1-i]*scale,), (data[1,-1-i]*scale,))
+                body_x = np.asarray([0, -np.cos(data[2,-1-i])])*30 + data[0,-1-i]*scale
+                body_y = np.asarray([0, -np.sin(data[2,-1-i])])*30 + data[1,-1-i]*scale
+                self.tracked_bodies[i].setData(body_x, body_y)
+            else:
+                self.tracked_heads[i].setData([])
+                self.tracked_bodies[i].setData([])
 
     def switch_colormap(self, k: bool):
         if k:

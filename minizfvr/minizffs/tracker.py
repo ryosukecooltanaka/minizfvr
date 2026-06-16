@@ -115,35 +115,32 @@ class TrackerObject():
                     bg_image = bg_image + frame
                     fish_mask = np.zeros(bg_image.shape)
 
-                # do the preprocessing
+                # do the preprocessing - now the returned values are 1d arrays!
                 fish_x, fish_y, angle, processed_frame, frect = detect_fish(frame, bg_image, 
                                             image_scale=self.param['image_scale'],
                                             dilate_size=self.param['dilate_size'],
                                             color_invert=self.param['color_invert'],
                                             body_threshold=self.param['body_threshold'],
                                             real_fish_px_range=(self.param['min_area_mm2']/self.param['mm_per_px']**2, 
-                                                                self.param['max_area_mm2']/self.param['mm_per_px']**2))
+                                                                self.param['max_area_mm2']/self.param['mm_per_px']**2),
+                                            n_fish_to_track=self.param['n_fish_to_track'])
                 
                 if ii > 1:
-                    # We will only update background when fish moves
-                    # Otherwise we will stop seeing stationary fish
-                    # Also if fish appers to be moving super fast that is more likely
-                    # to be us detecting some gunk etc. so ignore that for the sake of movements
-                    previous_ii = (ii - 1) % self.param['trace_length']
-                    this_frame_v_fish = np.sqrt((self.shared_arrays['tracking_history'][0, previous_ii]-fish_x)**2 + 
-                                                (self.shared_arrays['tracking_history'][1, previous_ii]-fish_y)**2) * self.param['mm_per_px'] / dt
-                    bg_update_flag = self.param['bg_update_min_velocity'] < this_frame_v_fish < self.param['bg_update_max_velocity'] 
+                    # We don't really want to be solving correspondence problems
+                    # so we just assume some fish is swimming and raise background update flag
+                    bg_update_flag = True
 
                 if bg_update_flag:
                     # to avoid "baking in" fish into the background, only select non-fish area for
                     # background update
                     fish_mask *= 0.0
-                    fish_mask[frect[1]:(frect[1]+frect[3]), frect[0]:(frect[0]+frect[2])] = 1.0
+                    for k in range(len(frect[0])):
+                        fish_mask[frect[1][k]:(frect[1][k]+frect[3][k]), frect[0][k]:(frect[0][k]+frect[2][k])] = 1.0
                     bg_image = ((fish_mask + (1-self.param['bg_alpha'])*(1.0-fish_mask)) * bg_image +
-                               self.param['bg_alpha'] * (1.0-fish_mask) * frame).astype(np.uint8)
+                            self.param['bg_alpha'] * (1.0-fish_mask) * frame).astype(np.uint8)
 
-                # send tracking results to stimulus program through the named pipe
-                self.send_results_through_pipe(timestamp, fish_x, fish_y, angle)
+                # Disabling communication for the multi-tracking version
+                # self.send_results_through_pipe(timestamp, fish_x, fish_y, angle) 
 
                 # write results into the shared memory array so the main process can see it
                 # note that this function mutate the content of the input array
@@ -151,14 +148,18 @@ class TrackerObject():
                     encode_frame_to_array(bg_image, self.shared_arrays['current_processed_frame'])
                 else:
                     encode_frame_to_array(processed_frame, self.shared_arrays['current_processed_frame'])
-                self.shared_arrays['tracking_history'][0, ii% self.param['trace_length']] = fish_x
-                self.shared_arrays['tracking_history'][1, ii% self.param['trace_length']] = fish_y
-                self.shared_arrays['tracking_history'][2, ii% self.param['trace_length']] = (angle + np.pi) % (np.pi * 2.0) - np.pi
-                self.shared_arrays['tracking_history'][3, ii% self.param['trace_length']] = timestamp
-                self.shared_arrays['index_buffer'][ii% self.param['trace_length']] = ii
 
-
-                ii += 1
+                n_fish_tracked = len(fish_x)
+                for k in range(self.param['n_fish_to_track']):
+                    if k < n_fish_tracked:
+                        self.shared_arrays['tracking_history'][0, ii% self.param['trace_length']] = fish_x[k]
+                        self.shared_arrays['tracking_history'][1, ii% self.param['trace_length']] = fish_y[k]
+                        self.shared_arrays['tracking_history'][2, ii% self.param['trace_length']] = (angle[k] + np.pi) % (np.pi * 2.0) - np.pi
+                    else:
+                        self.shared_arrays['tracking_history'][0:3, ii% self.param['trace_length']] = np.nan
+                    self.shared_arrays['tracking_history'][3, ii% self.param['trace_length']] = timestamp
+                    self.shared_arrays['index_buffer'][ii% self.param['trace_length']] = ii
+                    ii += 1
                 last_timestamp = timestamp
 
             except Empty:

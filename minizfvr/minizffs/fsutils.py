@@ -3,7 +3,7 @@ import numpy as np
 
 
 
-def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold, real_fish_px_range):
+def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold, real_fish_px_range, n_fish_to_track):
     """
     Free swimming fish tracking in two steps
     First, we identify the fish by comparing the background and current frames
@@ -32,53 +32,62 @@ def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold,
     # with different shades of grey
     visualization_image = body_img
 
-    # Detect fish as a connected region with the largest among ones with appropriate size
+    # Detect fish as a connected region with the N largest among ones with appropriate size
     n_labels, _, stats, centroids = cv2.connectedComponentsWithStats(body_img)
 
     is_appropriate_size = (stats[:,-1] > real_fish_px_range[0]) * (stats[:,-1] < real_fish_px_range[1])
+    n_detected_fish_like_object = np.sum(is_appropriate_size)
+    n_fish_to_report = min(n_detected_fish_like_object, n_fish_to_track)
 
     # nothing found
     if not any(is_appropriate_size):
         # There will always be at least one label (i.e., background)
         # If we cannot find the fish body, we will just return nan
-        return np.nan, np.nan, np.nan, visualization_image, (0,)*4
+            return [], [], [], visualization_image, ([],)*4
     
-    # This needs to be updated if we want to do multi fish tracking
-    fish_id = np.argmax(stats[:, -1]*is_appropriate_size)
-    cent_x, cent_y = centroids[fish_id] / image_scale # we will always operate in the px coordinate of the original frame
+    # cent_x, cent_y etc. are 1d array with the length of n_fish_to_report
+    fish_ids = np.argsort(-stats[:, -1]*is_appropriate_size)[:n_fish_to_report]
+    cent_x, cent_y = centroids[fish_ids, :].T / image_scale # we will always operate in the px coordinate of the original frame
 
     # slice fish
-    xpx, ypx, wpx, hpx, _ = (stats[fish_id] / image_scale).astype(int)
-    fish_snippet = diff_img[ypx:(ypx+hpx), xpx:(xpx+wpx)]
+    xpx, ypx, wpx, hpx, _ = (stats[fish_ids, :].T / image_scale).astype(int)
 
-    # update the viusalization image
-    slice_y = slice(int(ypx*image_scale), int((ypx+hpx)*image_scale))
-    slice_x = slice(int(xpx*image_scale), int((xpx+wpx)*image_scale))
-    visualization_image[slice_y, slice_x] += 127
+    # Now we loop over each fish
+    x_com, y_com, angle = np.zeros(n_fish_to_report), np.zeros(n_fish_to_report), np.zeros(n_fish_to_report)
+    for i in range(n_fish_to_report):
 
-    # First, find the orientation of the fish body by doing PCA
-    # mu11 are covariance of (x, y) positive pixel positions and
-    # mu20, mu02 are respectively variances in x, y dimensions
-    # Think of the covariance matrix M = [[mu20, mu11], [mu11, mu02]]
-    # The angle of the first eigen vector of M is going to be the long axis of the object
-    # Let  the eigenvector v = (cos(theta), sin(theta))) and eigenvalues lambda
-    # Now by expanding the character equation Mv=lambda*v, we get
-    # tan(theta) = (lambda-mu20)/mu11 [E1] (note if mu11=0, M is diagonal and theta is 0 or pi/2)
-    # At the same time, we can erase theta dependent terms and solve a quadratic equation
-    # for lambda to get lambda = [(mu20+mu02)+sqrt((mu20-mu02)**2+4*mu11**2)] / 2 [E2]
-    # Now using tan(2*theta) = 2*tan(theta)/(1-tan(theta)**2) and inserting [E1][E2]
-    # We arrive at tan(2*theta) = 2mu11/(mu20-mu02)
-    # Hence the definition of the angle below
-    M_body = cv2.moments(cv2.threshold(fish_snippet, body_threshold, 255, cv2.THRESH_BINARY)[1])
-    angle = 0.5 * np.arctan2(2 * M_body['mu11'], M_body['mu20'] - M_body['mu02'])
+        # cut out the area round the fish
+        fish_snippet = diff_img[ypx[i]:(ypx[i]+hpx[i]), xpx[i]:(xpx[i]+wpx[i])]
 
-    # Second, find the head position by finding the center of mass of thresholded image w/o resizing
-    M_head = cv2.moments(fish_snippet)
-    x_com = M_head['m10'] / M_head['m00'] - wpx/2
-    y_com = M_head['m01'] / M_head['m00'] - hpx/2
+        # update the viusalization image
+        slice_y = slice(int(ypx[i]*image_scale), int((ypx[i]+hpx[i])*image_scale))
+        slice_x = slice(int(xpx[i]*image_scale), int((xpx[i]+wpx[i])*image_scale))
+        visualization_image[slice_y, slice_x] += 127
+
+        # First, find the orientation of the fish body by doing PCA
+        # mu11 are covariance of (x, y) positive pixel positions and
+        # mu20, mu02 are respectively variances in x, y dimensions
+        # Think of the covariance matrix M = [[mu20, mu11], [mu11, mu02]]
+        # The angle of the first eigen vector of M is going to be the long axis of the object
+        # Let  the eigenvector v = (cos(theta), sin(theta))) and eigenvalues lambda
+        # Now by expanding the character equation Mv=lambda*v, we get
+        # tan(theta) = (lambda-mu20)/mu11 [E1] (note if mu11=0, M is diagonal and theta is 0 or pi/2)
+        # At the same time, we can erase theta dependent terms and solve a quadratic equation
+        # for lambda to get lambda = [(mu20+mu02)+sqrt((mu20-mu02)**2+4*mu11**2)] / 2 [E2]
+        # Now using tan(2*theta) = 2*tan(theta)/(1-tan(theta)**2) and inserting [E1][E2]
+        # We arrive at tan(2*theta) = 2mu11/(mu20-mu02)
+        # Hence the definition of the angle below
+        M_body = cv2.moments(cv2.threshold(fish_snippet, body_threshold, 255, cv2.THRESH_BINARY)[1])
+        angle[i] = 0.5 * np.arctan2(2 * M_body['mu11'], M_body['mu20'] - M_body['mu02'])
+
+        # Second, find the head position by finding the center of mass of thresholded image w/o resizing
+        M_head = cv2.moments(fish_snippet)
+        x_com[i] = M_head['m10'] / M_head['m00'] - wpx[i]/2
+        y_com[i] = M_head['m01'] / M_head['m00'] - hpx[i]/2
+
     fish_x = cent_x + x_com
     fish_y = cent_y + y_com
-    if x_com < 0: # Figure out why this makes sense at some point!
-        angle = angle+np.pi
+    
+    angle[x_com<0] += np.pi
 
     return fish_x, fish_y, angle, visualization_image, (xpx, ypx, wpx, hpx)

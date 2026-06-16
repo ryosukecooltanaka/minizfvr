@@ -100,6 +100,7 @@ class MiniZFFS(QMainWindow):
 
         # Memory for the history of the x, y position / angle and associated time stamps.
         # length is decided by trace_length parameter (x 8byte float x 4)
+        # Note that we will serially encode multiple fish data
         self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=32*self.param.trace_length)
         # For the sake of saving, we need to keep track how manieth sample we have written
         # We use uint32, which would not cause overflow for 4 month with 200 Hz tracking
