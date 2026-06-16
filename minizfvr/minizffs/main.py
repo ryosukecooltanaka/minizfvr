@@ -15,6 +15,8 @@ Overall multiprocessing architecture is the same as minizftt:
   as well as being sent to a named pipe (for stimulus programs to use them).
 - Passing of parameters from the main GUI to the child processes (mainly the Tracker) will be done through a Queue
 
+Feature branch to implement multi-fish tracking
+
 """
 
 import numpy as np
