@@ -53,8 +53,10 @@ class FreeSwimmingParams(BaseParams):
     bg_update_min_velocity: float = 5.0
     bg_update_max_velocity: float = 30.0 # unlikely that fish is this fast
 
-    # visualization related parameters
-    trace_length: int = 1000
+    # Size of the memory to reserve (in #datapoints)
+    # Note that this number will be distributed to multiple fish
+    # and we are saving every 1 second
+    trace_length: int = 10000
 
     # save related
     save_duration: float = 60.0 # in seconds

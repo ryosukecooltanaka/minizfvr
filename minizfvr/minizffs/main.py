@@ -149,7 +149,7 @@ class MiniZFFS(QMainWindow):
         self.tracking_process.daemon = True
 
         ## Prepare a saver object to handle saving
-        self.saver = Saver(self.tracking_history, self.index_buffer, self.param)
+        self.saver = Saver(self.tracking_history, self.timestamp_buffer, self.index_buffer, self.param)
 
         # Setup callback functions for the control panel GUI.
         self.connect_control_callbacks()
