@@ -75,7 +75,7 @@ class TrackerObject():
         last_timestamp = -1
 
         # index of the tracked frames
-        ii: np.uint32 = 0
+        ii: np.int32 = 0
 
         # Do the tracking continuously
         # We will exit this loop if we receive the flag from the main GUI
@@ -156,8 +156,8 @@ class TrackerObject():
                         self.shared_arrays['tracking_history'][1, ii% self.param['trace_length']] = fish_y[k]
                         self.shared_arrays['tracking_history'][2, ii% self.param['trace_length']] = (angle[k] + np.pi) % (np.pi * 2.0) - np.pi
                     else:
-                        self.shared_arrays['tracking_history'][0:3, ii% self.param['trace_length']] = np.nan
-                    self.shared_arrays['tracking_history'][3, ii% self.param['trace_length']] = timestamp
+                        self.shared_arrays['tracking_history'][:, ii% self.param['trace_length']] = np.nan
+                    self.shared_arrays['timestamp_buffer'][ii% self.param['trace_length']] = timestamp
                     self.shared_arrays['index_buffer'][ii% self.param['trace_length']] = ii
                     ii += 1
                 last_timestamp = timestamp
@@ -179,25 +179,43 @@ class TrackerObject():
         Organizing them in a list just because I wanted to have some hiearchy...
         """
 
-        self.shared_memories = dict(
-            raw_frame_memory       = shared_memory.SharedMemory(name='raw_frame_memory'),
-            processed_frame_memory = shared_memory.SharedMemory(name='processed_frame_memory'),
-            tracking_memory   = shared_memory.SharedMemory(name='tracking_memory'),
-            index_memory = shared_memory.SharedMemory(name='index_memory')
+        # specify memory names, size, and type so I can establish access to them concisely using dict comprehension
+
+        shared_memory_names = (
+            'raw_frame_memory',
+            'processed_frame_memory',
+            'tracking_memory',
+            'timestamp_memory',
+            'index_memory'
         )
 
         # The sizes of ndarrays are hard-coded without referencing the memory size, because memory size cannot be
         # an arbitrary number and can be different from what we specified in the parent process
-        self.shared_arrays = dict(
-            current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
-            current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
-            tracking_history   = np.ndarray((4, self.param['trace_length']), dtype=np.float64, buffer=self.shared_memories['tracking_memory'].buf),
-            index_buffer = np.ndarray((self.param['trace_length'], ), dtype=np.uint32, buffer=self.shared_memories['index_memory'].buf)
+        shared_memory_shape_type_pairs = (
+            ((1000000,), np.uint8),
+            ((1000000,), np.uint8),
+            ((3, self.param['trace_length']), np.float64),
+            ((self.param['trace_length'],), np.float64),
+            ((self.param['trace_length'],), np.int32)
         )
+
+        array_names = (
+            'current_raw_frame',
+            'current_processed_frame',
+            'tracking_history',
+            'timestamp_buffer',
+            'index_buffer'
+        )
+
+        self.shared_memories = {sm_name: shared_memory.SharedMemory(name=sm_name) for sm_name in shared_memory_names}
+        self.shared_arrays = {ar_name: np.ndarray(smst[0], dtype=smst[1], buffer=self.shared_memories[sm_name].buf) 
+                              for ar_name, smst, sm_name in zip(array_names, shared_memory_shape_type_pairs, shared_memory_names)}
+
 
     def send_results_through_pipe(self, t, x, y, theta):
         """
         Send tracking results to whatever stimulus presentation program through the named Pipe
+        Not called in this feature branch
         """
 
         if self.conn is not None:

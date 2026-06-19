@@ -99,11 +99,16 @@ class MiniZFFS(QMainWindow):
         self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
 
         # Memory for the history of the x, y position / angle and associated time stamps.
-        # length is decided by trace_length parameter (x 8byte float x 4)
-        # Note that we will serially encode multiple fish data
-        self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=32*self.param.trace_length)
+        # Now that we are tracking multiple, variable numbers of fish, the size of reserved memory does not one-to-one
+        # correspond to the number of time-points. Each fish x timepoint combination requires 8 byte float x 3 for x, y, angle.
+        # We shape this memory in 2d array (because the #fish to track can be changed via GUI) and simply serially encode them.
+        self.tracking_memory = shared_memory.SharedMemory(create=True, name='tracking_memory', size=24*self.param.trace_length)
+
+        # Because we track multiple fish but do not need time stamp for each fish, I separate the buffer for time stamp (64bit)
+        self.timestamp_memory = shared_memory.SharedMemory(create=True, name='timestamp_memory', size=8*self.param.trace_length)
+
         # For the sake of saving, we need to keep track how manieth sample we have written
-        # We use uint32, which would not cause overflow for 4 month with 200 Hz tracking
+        # We use int32, which would not cause overflow for 2 month with 200 Hz tracking
         self.index_memory = shared_memory.SharedMemory(create=True, name='index_memory', size=4*self.param.trace_length)
 
         ## Create numpy arrays that refers to the shared memory we allocated
@@ -111,8 +116,10 @@ class MiniZFFS(QMainWindow):
         # dynamically change. We will reshape these 1d array into 2d whenever we need to perform operations on 2d.
         self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
         self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
-        self.tracking_history = np.ndarray((4, self.param.trace_length), dtype=np.float64, buffer=self.tracking_memory.buf)
+        self.tracking_history = np.ndarray((3, self.param.trace_length), dtype=np.float64, buffer=self.tracking_memory.buf)
         self.tracking_history[:] = 0 # initialize
+        self.timestamp_buffer = np.ndarray((self.param.trace_length,), dtype=np.float64, buffer=self.timestamp_memory.buf)
+        self.timestamp_buffer[:] = 0
         self.index_buffer = np.ndarray((self.param.trace_length, ), dtype=np.int32, buffer=self.index_memory.buf)
         self.index_buffer[:] = -1
 
@@ -252,20 +259,22 @@ class MiniZFFS(QMainWindow):
 
         if any(self.tracking_history[1, :] > 0):
             # find the index of the latest data
-            head_index = np.argmax(self.tracking_history[-1, :])
+            # note that index increments for time x fish
+            head_index = np.argmax(self.index_buffer)
 
-            # Roll the array so that the timestamp is monotonically increasing -- otherwise there will be weird
-            # line connecting the head and tail
-            latest_t = self.tracking_history[-1, head_index]
-            rolled_data = np.roll(self.tracking_history[:, self.tracking_history[-1,:]>0], -head_index-1, axis=1)
+            # Roll the array so that the timestamp is monotonically increasing
+            # Also ignore the part where there is no data
+            latest_t = self.timestamp_buffer[head_index]
+            rolled_data = np.roll(self.tracking_history[:, self.index_buffer>0], -head_index-1, axis=1)
 
             # Indicate frame rate (average for 100 frames, because if we do this every frame it is too jitterly to read)
             if rolled_data.shape[1] > 101:
-                frame_rate = 100/(latest_t - rolled_data[-1, -101])
+                frame_rate = 100/(latest_t - self.timestamp_buffer[(head_index-100)%self.param.trace_length])/self.param.n_fish_to_track
                 self.message_strip.update_message('Median frame rate = {:0.2f} Hz'.format(frame_rate), 0)
+                self.message_strip.update_message('#Tracked fish = {}'.format(np.sum(~np.isnan(rolled_data[0,-self.param.n_fish_to_track:]))), 1)
 
-            # plot
-            self.camera_panel.update_tracked_fish(rolled_data, factor)
+            # plot fish as dots and lines
+            self.camera_panel.update_tracked_fish(rolled_data[:,-self.param.n_fish_to_track:], factor)
 
         ## Control panel -- connect button update
         if self.tracker.connection_lost_event.is_set():
@@ -312,7 +321,7 @@ class MiniZFFS(QMainWindow):
 
         # show roi size (always in the raw coordinate)
         self.message_strip.update_message(
-            'ROI size (raw) = {0:.0f}/{1:.0f} px'.format(size[0]/self.param.image_scale,size[1]/self.param.image_scale), 1)
+            'ROI size (raw) = {0:.0f}/{1:.0f} px'.format(size[0]/self.param.image_scale,size[1]/self.param.image_scale), 2)
 
         # Also, we want to adapt the search area size to the tail standard length,
         # because when the search area is too big (say, bigger than each segment)
