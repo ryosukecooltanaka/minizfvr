@@ -219,9 +219,11 @@ class MiniZFFS(QMainWindow):
         self.param.paramChanged.connect(lambda f, p=self.param : self.control_panel.refresh_gui(p))
         self.param.paramChanged.connect(lambda f  : self.camera_panel.refresh_gui(f))
 
-        # save panel callback
-        self.control_panel.save_button.clicked.connect(self.control_panel.save_button.switch_state)
-        self.control_panel.save_button.clicked.connect(lambda: self.saver.toggle_save_state(self.control_panel.save_button.activated))
+        # Sync save button state to Saver state through a callback
+        # Button click toggle the saver state, saver state change toggles the button visual
+        # This way button can go into the correct state if saver stops saving from timeout
+        self.control_panel.save_button.clicked.connect(lambda: self.saver.toggle_save_state(~self.control_panel.save_button.activated))
+        self.saver.saveStateChanged.connect(lambda f: self.control_panel.save_button.force_state(f))
 
         # Connect button callback
         self.control_panel.connect_button.clicked.connect(self.tracker.attempt_connection_event.set)

@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
-
-
+from scipy.optimize import linear_sum_assignment as LSA
+from time import time
 
 def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold, real_fish_px_range, n_fish_to_track):
     """
@@ -91,3 +91,46 @@ def detect_fish(img, bg, image_scale, dilate_size, color_invert, body_threshold,
     angle[x_com<0] += np.pi
 
     return fish_x, fish_y, angle, visualization_image, (xpx, ypx, wpx, hpx)
+
+def solve_fish_correspondence(x, y, theta, t, max_velocity_mms=50):
+    """
+    Solve fish correspondence with the Hungarian algorithm.
+    Use squared distance as the cost value, and when there is 
+    missing values, we use fixed cost derived from maximum velocity.
+    If we trust theta enough, in principle we can use that as cost as well.
+    """
+
+    # we assume x, y, theta to be timepoint x n_fish matrix and x/y in mm
+    sorted_x = [x[0]]
+    sorted_y = [y[0]]
+    sorted_theta = [theta[0]]
+
+    print('Solving correspondence among {1} fish for {0} frames'.format(*x.shape))
+    index_to_report_progress = np.arange(0, len(t), len(t)//10).astype(int)
+
+    tic = time()
+    for i in range(1,len(t)):
+        # calculate squared distance
+        DD = (sorted_x[-1][:,None]-x[i][None,:])**2 + (sorted_y[-1][:,None]-y[i][None,:])**2
+        # get the duration
+        dt = t[i]-t[i-1]
+        # maximum possible squared distance fish can move (say 50 mm/s)
+        max_dd = (max_velocity_mms*dt)**2
+        # penalize missing value with this max squared distance
+        DD[np.isnan(DD)] = max_dd
+        # solve correspondence with the Hungarian algorithm
+        _, sort_ind = LSA(DD)
+        sorted_x.append(x[i][sort_ind])
+        sorted_y.append(y[i][sort_ind])
+        sorted_theta.append(theta[i][sort_ind])
+        
+        if any(index_to_report_progress==i):
+            print('Done {0:0.2f}%'.format(100*i/len(t)))
+    print('Finished solving correspondence! Took {0:0.2f} s'.format(time()-tic))
+
+    
+    sorted_x = np.asarray(sorted_x)
+    sorted_y = np.asarray(sorted_y)
+    sorted_theta = np.asarray(sorted_theta)
+
+    return sorted_x, sorted_y, sorted_theta

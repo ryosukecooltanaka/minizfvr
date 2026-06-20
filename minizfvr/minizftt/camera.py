@@ -179,7 +179,7 @@ class DummyCamera(Camera):
 
     def fetch_image(self):
 
-        time.sleep(1.0 / 100) # dummy video will be at 30 Hz
+        time.sleep(1.0 / 10) # dummy video will be at 30 Hz
 
         if self.frame_counter == self.video.get(cv2.CAP_PROP_FRAME_COUNT):
             self.video.set(cv2.CAP_PROP_POS_FRAMES,0)
