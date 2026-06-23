@@ -206,7 +206,8 @@ class MiniZFFS(QMainWindow):
             self.control_panel.image_scale_box.editingFinished,
             self.control_panel.dilate_size_box.editingFinished,
             self.control_panel.body_threshold_box.editingFinished,
-            self.control_panel.save_duration_box.editingFinished
+            self.control_panel.save_duration_box.editingFinished,
+            self.control_panel.n_fish_box.editingFinished
         )
         for ettpr in events_to_trigger_param_refresh:
             ettpr.connect(self.refresh_param)
@@ -271,6 +272,7 @@ class MiniZFFS(QMainWindow):
 
             # Indicate frame rate (average for 100 frames, because if we do this every frame it is too jitterly to read)
             if rolled_data.shape[1] > 101:
+                # This will not show accurate framerates after changing fish number
                 frame_rate = 100/(latest_t - self.timestamp_buffer[(head_index-100)%self.param.trace_length])/self.param.n_fish_to_track
                 self.message_strip.update_message('Median frame rate = {:0.2f} Hz'.format(frame_rate), 0)
                 self.message_strip.update_message('#Tracked fish = {}'.format(np.sum(~np.isnan(rolled_data[0,-self.param.n_fish_to_track:]))), 1)
@@ -292,9 +294,9 @@ class MiniZFFS(QMainWindow):
         """
 
         # Read the current content of the GUI widgets
-        new_sr, new_sb, new_inv, new_iscale, new_dsize, new_bthresh, new_sd = self.control_panel.return_current_value()
+        new_sr, new_sb, new_inv, new_iscale, new_dsize, new_bthresh, new_sd, new_nf = self.control_panel.return_current_value()
 
-        # Before overwriting the old parameters, check if we need to adjust the tail ROI
+        # Before overwriting the old parameters, check if we need to adjust the ROI
         # Because the segment position from the tracking algorithms are in the coordinate of the preprocessed
         # (potentially resized) images, we need to adjust their scales every time we switch between showing raw vs.
         # processed images or changing the resizing factor. We pass this tail_rescale_factor through the paramChanged
@@ -307,8 +309,8 @@ class MiniZFFS(QMainWindow):
         if new_iscale!=self.param.image_scale and not self.param.show_raw: # if we changed the scale
             tail_rescale_factor = new_iscale / self.param.image_scale
 
-        # In the param object, we keep the tail standard positions in the rescaled image pixel coordinate
-        # (i.e., the one that can be directly used for tracking, rather htan visualization)
+        # In the param object, we keep the ROI in the rescaled image pixel coordinate
+        # (i.e., the one that can be directly used for tracking, rather than visualization)
         # We need to update these, if (a) the tail standard was moved from the GUI, (b) image scale was changed
 
         # account for image scale change
@@ -324,10 +326,11 @@ class MiniZFFS(QMainWindow):
         # show roi size (always in the raw coordinate)
         self.message_strip.update_message(
             'ROI size (raw) = {0:.0f}/{1:.0f} px'.format(size[0]/self.param.image_scale,size[1]/self.param.image_scale), 2)
+        
+        # If the number of fish to be tracked was changed, we need to reset
+        if not self.param.n_fish_to_track == new_nf:
+            self.camera_panel.clear_tracked_fish()
 
-        # Also, we want to adapt the search area size to the tail standard length,
-        # because when the search area is too big (say, bigger than each segment)
-        # the intensity center-of-mass can "go back" on the actual tail
 
         # Insert the new values to the parameter object
         self.param.show_raw = new_sr
@@ -337,6 +340,7 @@ class MiniZFFS(QMainWindow):
         self.param.dilate_size = new_dsize
         self.param.body_threshold = new_bthresh
         self.param.save_duration = new_sd
+        self.param.n_fish_to_track = new_nf
 
         # Emit parameter change signal (will trigger GUI update)
         self.param.paramChanged.emit(tail_rescale_factor)

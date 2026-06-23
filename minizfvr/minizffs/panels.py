@@ -92,6 +92,11 @@ class CameraPanel(pg.GraphicsLayoutWidget):
                 self.tracked_heads[i].setData([])
                 self.tracked_bodies[i].setData([])
 
+    def clear_tracked_fish(self):
+        for th, tb in zip(self.tracked_heads, self.tracked_bodies):
+            th.setData([])
+            tb.setData([])
+
     def switch_colormap(self, k: bool):
         if k:
             self.fish_image_item.setColorMap(pg.ColorMap((0,1), [(0,)*3,(255,)*3]))
@@ -110,6 +115,10 @@ class ControlPanel(QWidget):
 
         # Prepare widgets that control the parameters
         # preprocessing parameters
+
+        # In the multi-fish track feature branch, we do not do the closed loop
+        # and thus connect button will not be shown but this will be left here
+        # (too lazy to remove everything)
         self.connect_button = bistateButton('Connect', t2='Connected', c1='#FFF', c2='#E6C') # attempt connection to the stimulus window
         self.save_button = bistateButton('Save', t2='Stop', c1='#FFF', c2='#E6C') # attempt connection to the stimulus window
         
@@ -124,6 +133,9 @@ class ControlPanel(QWidget):
 
         self.save_duration_box = TypeForcedEdit(float)
 
+        # newly added
+        self.n_fish_box = TypeForcedEdit(int)
+
         self.arrange_widget()
 
     def arrange_widget(self):
@@ -134,14 +146,16 @@ class ControlPanel(QWidget):
         # arrange preprocessing control widget into a grid layout
         grid = QGridLayout()
         self.save_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
-        self.connect_button.setSizePolicy(QSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding))
         self.save_button.setMinimumWidth(100)
-        grid.addWidget(self.save_button,           0, 0, 2, 1)
-        grid.addWidget(self.connect_button,        2, 0, 2, 1)
+
+        grid.addWidget(self.save_button,           0, 0, 3, 1) # row, col, rowspan, colspan
 
         grid.addWidget(self.show_raw_checkbox,     0, 1, 1, 1) # row, col, rowspan, colspan
         grid.addWidget(self.show_bg_checkbox,      1, 1, 1, 1) # row, col, rowspan, colspan
         grid.addWidget(self.color_invert_checkbox, 2, 1, 1, 1)
+
+        grid.addWidget(QLabel("#fish"),            3, 0, 1, 1, Qt.AlignCenter)
+        grid.addWidget(self.n_fish_box,            3, 1, 1, 1)
 
         grid.addWidget(QLabel("Image Scale"),      0, 2, 1, 1, Qt.AlignCenter)
         grid.addWidget(self.image_scale_box,       0, 3, 1, 1)
@@ -173,6 +187,7 @@ class ControlPanel(QWidget):
         self.dilate_size_box.setValue(p.dilate_size)
         self.body_threshold_box.setValue(p.body_threshold)
         self.save_duration_box.setValue(p.save_duration)
+        self.n_fish_box.setValue(p.n_fish_to_track)
 
     def return_current_value(self):
         return self.show_raw_checkbox.isChecked(),\
@@ -181,4 +196,5 @@ class ControlPanel(QWidget):
                self.image_scale_box.value(),\
                self.dilate_size_box.value(),\
                self.body_threshold_box.value(), \
-               self.save_duration_box.value()
+               self.save_duration_box.value(),\
+               self.n_fish_box.value()
