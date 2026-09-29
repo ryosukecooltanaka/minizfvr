@@ -105,8 +105,8 @@ class MiniZFTT(QMainWindow):
         ## Create numpy arrays that refers to the shared memory we allocated
         # For the raw and processed image frames, we store data as 1d array, because the shape of the frame can
         # dynamically change. We will reshape these 1d array into 2d whenever we need to perform operations on 2d.
-        self.current_raw_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
-        self.current_processed_frame = np.ndarray((1000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
+        self.current_raw_frame = np.ndarray((4000000,), dtype=np.uint8, buffer=self.raw_frame_memory.buf)
+        self.current_processed_frame = np.ndarray((4000000,), dtype=np.uint8, buffer=self.processed_frame_memory.buf)
         self.current_segments = np.ndarray((2, 10), dtype=np.float64, buffer=self.segment_memory.buf)
         self.angle_history = np.ndarray((2, self.param.angle_trace_length), dtype=np.float64, buffer=self.angle_memory.buf)
         self.angle_history[:] = 0 # initialize
