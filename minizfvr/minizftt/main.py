@@ -91,8 +91,8 @@ class MiniZFTT(QMainWindow):
 
         # Memory for raw and processed image data. Because we do not know the camera frame size until we kick-start
         # the camera process, we just reserve 1MB each for these
-        self.raw_frame_memory = shared_memory.SharedMemory(create=True, name='raw_frame_memory', size=1000000)
-        self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=1000000)
+        self.raw_frame_memory = shared_memory.SharedMemory(create=True, name='raw_frame_memory', size=4000000)
+        self.processed_frame_memory = shared_memory.SharedMemory(create=True, name='processed_frame_memory', size=4000000)
 
         # Memory for storing the latest tracked segment positions for the sake of visualization.
         # Max 10 segments x {x, y} x float64 (8 bytes) = 160 bytes
