@@ -69,7 +69,7 @@ class Camera:
         self.initialize()
         # connect to shared memory
         raw_frame_memory = shared_memory.SharedMemory(name='raw_frame_memory')
-        frame_array = np.ndarray((1000000,), dtype=np.uint8, buffer=raw_frame_memory.buf)
+        frame_array = np.ndarray((4000000,), dtype=np.uint8, buffer=raw_frame_memory.buf)
 
         while not self.exit_acquisition_event.is_set():
             fetch_success, frame, timestamp = self.fetch_image()

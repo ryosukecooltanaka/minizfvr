@@ -147,8 +147,8 @@ class TrackerObject():
         # The sizes of ndarrays are hard-coded without referencing the memory size, because memory size cannot be
         # an arbitrary number and can be different from what we specified in the parent process
         self.shared_arrays = dict(
-            current_raw_frame        = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
-            current_processed_frame  = np.ndarray((1000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
+            current_raw_frame        = np.ndarray((4000000,), dtype=np.uint8, buffer=self.shared_memories['raw_frame_memory'].buf),
+            current_processed_frame  = np.ndarray((4000000,), dtype=np.uint8, buffer=self.shared_memories['processed_frame_memory'].buf),
             current_segment = np.ndarray((2, 10), dtype=np.float64, buffer=self.shared_memories['segment_memory'].buf),
             angle_history   = np.ndarray((2, self.param['angle_trace_length']), dtype=np.float64, buffer=self.shared_memories['angle_memory'].buf)
         )
