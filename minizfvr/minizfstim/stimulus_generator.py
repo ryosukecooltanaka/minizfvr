@@ -24,12 +24,19 @@ class StimulusGenerator(QObject):
         update() method is called at regular interval by the timer callback of the main app.
         """
         if t > self.duration:
+            # durationPassed is connected to main app toggle_run_state() which
+            # calls StimulusGenerator reset(), but this does not abort the ongoing
+            # update() (called by main app stimlus_update(), which expects frames)
+            # This will wreck havoc in child draw_frame() written with the assumption
+            # that t never goes beyond duration
             self.durationPassed.emit()
-        frame = self.draw_frame(t, *args, **kwargs)
+            return []
+        else:
+            frame = self.draw_frame(t, *args, **kwargs)
 
-        # return should be a list of frame even if there is only one frame,
-        # so we can handle single panel vs. panorama outputs in a consistent fashion
-        return frame
+            # return should be a list of frame even if there is only one frame,
+            # so we can handle single panel vs. panorama outputs in a consistent fashion
+            return frame
 
     def draw_frame(self, t, *args, **kwargs):
         """

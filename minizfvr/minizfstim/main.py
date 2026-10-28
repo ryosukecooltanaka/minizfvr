@@ -250,6 +250,12 @@ class StimulusControlWindow(QMainWindow):
                 bias=self.estimator.bias
             )
 
+            # stimlus generator update() is tasked to check if t reached the duration and
+            # emit durationPassed, which will trigger toggle_run_state(). As a result, for the
+            # last frame of a completed experiment, stim_frame can be an empty array
+            if len(stim_frame)==0:
+                return
+
             # In case the size of the bitmap is different from what is in the parameter (which would be
             # usually only the case during the first frame, we insert new bitmap sizes into the parameter.
             # This will only affect what is being shown if we are forcing the equal ratio and the aspect
